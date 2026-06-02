@@ -27,6 +27,7 @@ interface ProjectState {
   isCreating: boolean
   isUploading: boolean
   isProcessing: boolean
+  isUpdating: boolean
   isFetching: boolean
   isFetchingProjects: boolean
   error: string | null
@@ -39,6 +40,7 @@ const initialState: ProjectState = {
   isCreating: false,
   isUploading: false,
   isProcessing: false,
+  isUpdating: false,
   isFetching: false,
   isFetchingProjects: false,
   error: null,
@@ -106,6 +108,23 @@ export const processProject = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(
         error.response?.data?.message || error.message || 'Failed to start processing'
+      )
+    }
+  }
+)
+
+export const updateProject = createAsyncThunk(
+  'project/update',
+  async (
+    payload: { projectId: number | string; data: Partial<Project> },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await api.put(`/api/projects/${payload.projectId}`, payload.data)
+      return response.data.data as Project
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.message || error.message || 'Failed to update project'
       )
     }
   }
@@ -216,6 +235,21 @@ const projectSlice = createSlice({
       })
       .addCase(processProject.rejected, (state, action) => {
         state.isProcessing = false
+        state.error = action.payload as string
+      })
+
+    builder
+      .addCase(updateProject.pending, (state) => {
+        state.isUpdating = true
+        state.error = null
+      })
+      .addCase(updateProject.fulfilled, (state, action) => {
+        state.isUpdating = false
+        state.currentProject = action.payload
+        state.error = null
+      })
+      .addCase(updateProject.rejected, (state, action) => {
+        state.isUpdating = false
         state.error = action.payload as string
       })
 

@@ -1,13 +1,16 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { VideoPreview } from '@/components/create/video-preview'
 import { Sparkles, ArrowRight, Upload, RefreshCcw, FileText, Play, AlertCircle } from 'lucide-react'
 import { useProject } from '@/hooks/useProject'
 import { useProjectProgress } from '@/hooks/usePusher'
+import { useTemplates } from '@/hooks/useTemplates'
 import { useAppDispatch } from '@/hooks/useAuth'
 import { updateCurrentProject, retryProject } from '@/store/projectSlice'
 
@@ -22,8 +25,10 @@ function CreatePageContent() {
     error,
     fetchProjectById,
     uploadProjectVideo,
+    updateProject,
     processProject,
   } = useProject()
+  const { templateConfig, loadTemplateConfig } = useTemplates()
   
   const projectProgress = useProjectProgress(projectId ? Number(projectId) : null)
   const dispatch = useAppDispatch()
@@ -31,9 +36,164 @@ function CreatePageContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedFileName, setSelectedFileName] = useState('')
   const [selectedFilePreview, setSelectedFilePreview] = useState<string | null>(null)
+  const [templateSettings, setTemplateSettings] = useState<Record<string, any>>({})
   const [localError, setLocalError] = useState<string | null>(null)
   const [displayProgress, setDisplayProgress] = useState(0)
   const [isRetrying, setIsRetrying] = useState(false)
+
+  const selectedTemplateType = currentProject?.template_type ?? null
+  const isTemplateUploadRequired = templateConfig?.requires_upload !== false
+
+  useEffect(() => {
+    if (!selectedTemplateType) {
+      return
+    }
+
+    loadTemplateConfig(selectedTemplateType).catch(() => {
+      // ignore failure handled in slice
+    })
+  }, [selectedTemplateType, loadTemplateConfig])
+
+  useEffect(() => {
+    if (!templateConfig) {
+      return
+    }
+
+    const defaults: Record<string, any> = {}
+    Object.entries(templateConfig.settings_schema ?? {}).forEach(([fieldKey, fieldSchema]) => {
+      if (currentProject?.settings && fieldKey in currentProject.settings) {
+        defaults[fieldKey] = currentProject.settings[fieldKey]
+      } else {
+        defaults[fieldKey] = fieldSchema.default ?? (fieldSchema.type === 'checkbox' ? false : '')
+      }
+    })
+
+    setTemplateSettings(defaults)
+  }, [templateConfig, currentProject?.settings])
+
+  const isFieldRequired = (fieldKey: string, fieldSchema: any) => {
+    return typeof fieldSchema.required === 'boolean' ? fieldSchema.required : false
+  }
+
+  const getFieldValue = (fieldKey: string, fieldSchema: any) => {
+    return templateSettings[fieldKey] ?? fieldSchema.default ?? (fieldSchema.type === 'checkbox' ? false : '')
+  }
+
+  const validateTemplateFields = () => {
+    if (!templateConfig?.settings_schema) {
+      return true
+    }
+
+    const missingFields = Object.entries(templateConfig.settings_schema)
+      .filter(([fieldKey, fieldSchema]) => isFieldRequired(fieldKey, fieldSchema))
+      .filter(([fieldKey]) => {
+        const value = String(
+          templateSettings[fieldKey] ?? templateConfig.settings_schema?.[fieldKey]?.default ?? ''
+        ).trim()
+        return value.length === 0
+      })
+
+    if (missingFields.length > 0) {
+      setLocalError(
+        `Please complete the following required field${missingFields.length > 1 ? 's' : ''}: ${missingFields
+          .map(([fieldKey]) => fieldKey)
+          .join(', ')}`
+      )
+      return false
+    }
+
+    return true
+  }
+
+  const renderTemplateField = (fieldKey: string, fieldSchema: any) => {
+    const value = getFieldValue(fieldKey, fieldSchema)
+    const required = isFieldRequired(fieldKey, fieldSchema)
+    const label = `${fieldSchema.label}${required ? ' *' : ''}`
+
+    const handleSettingChange = (newValue: any) => {
+      setTemplateSettings((prev) => ({
+        ...prev,
+        [fieldKey]: newValue,
+      }))
+    }
+
+    if (fieldSchema.type === 'textarea') {
+      return (
+        <div key={fieldKey} className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">{label}</label>
+          <textarea
+            value={value}
+            onChange={(event) => handleSettingChange(event.target.value)}
+            placeholder={fieldSchema.placeholder ?? fieldSchema.label}
+            className="w-full min-h-[120px] rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+      )
+    }
+
+    if (fieldSchema.type === 'select' && Array.isArray(fieldSchema.options)) {
+      return (
+        <div key={fieldKey} className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">{label}</label>
+          <select
+            value={value}
+            onChange={(event) => handleSettingChange(event.target.value)}
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          >
+            {fieldSchema.options.map((option: string) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    if (fieldSchema.type === 'checkbox') {
+      return (
+        <div key={fieldKey} className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(event) => handleSettingChange(event.target.checked)}
+            className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+          />
+          <label className="text-sm font-medium text-foreground">{label}</label>
+        </div>
+      )
+    }
+
+    return (
+      <div key={fieldKey} className="space-y-2">
+        <label className="block text-sm font-medium text-foreground">{label}</label>
+        <Input
+          value={value}
+          onChange={(event) => handleSettingChange(event.target.value)}
+          placeholder={fieldSchema.placeholder ?? fieldSchema.label}
+          className="w-full"
+        />
+      </div>
+    )
+  }
+
+  const getTemplateRequirementNotes = () => {
+    const notes: string[] = []
+
+    if (templateConfig?.requires_upload === false) {
+      notes.push('No video upload is required for this template.')
+    } else {
+      notes.push('This template requires a video upload before processing.')
+    }
+
+    const requiredFields = Object.entries(templateConfig?.settings_schema ?? {})
+      .filter(([, fieldSchema]) => fieldSchema.required)
+      .map(([fieldKey, fieldSchema]) => fieldSchema.label ?? fieldKey)
+
+    if (requiredFields.length > 0) {
+      notes.push(`Required fields: ${requiredFields.join(', ')}.`)
+    }
+
+    return notes
+  }
 
   useEffect(() => {
     if (!projectId) {
@@ -156,13 +316,29 @@ function CreatePageContent() {
   }
 
   const handleProcess = async () => {
-    if (!projectId) {
+    if (!projectId || !currentProject) {
       return
     }
 
     setLocalError(null)
 
+    if (!validateTemplateFields()) {
+      return
+    }
+
+    if (isTemplateUploadRequired && !currentProject.video_path) {
+      setLocalError('This template requires a video upload before processing.')
+      return
+    }
+
     try {
+      const settingsChanged = JSON.stringify(currentProject.settings ?? {}) !== JSON.stringify(templateSettings)
+      if (settingsChanged) {
+        await updateProject({
+          projectId: Number(projectId),
+          data: { settings: templateSettings },
+        })
+      }
       await processProject(Number(projectId))
     } catch (error) {
       setLocalError('Failed to start processing. Please try again.')
@@ -194,13 +370,20 @@ function CreatePageContent() {
     }
   }
 
-  const canUpload = Boolean(projectId && selectedFile && currentProject?.status !== 'processing')
+  const canUpload = Boolean(
+    projectId &&
+      selectedFile &&
+      currentProject?.status !== 'processing' &&
+      isTemplateUploadRequired
+  )
+
   const canProcess = Boolean(
     projectId &&
-      currentProject?.video_path &&
+      currentProject &&
       currentProject.status !== 'processing' &&
       currentProject.status !== 'completed' &&
-      currentProject.status !== 'failed'
+      currentProject.status !== 'failed' &&
+      (!isTemplateUploadRequired || Boolean(currentProject.video_path))
   )
 
   return (
@@ -217,7 +400,9 @@ function CreatePageContent() {
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Project Workflow</h1>
           </div>
           <p className="text-sm sm:text-base text-muted-foreground">
-            Upload your video and start AI processing.
+            {templateConfig?.requires_upload === false
+              ? 'Provide prompt details for the selected AI shorts template and start processing.'
+              : 'Upload your video and start AI processing.'}
           </p>
         </motion.div>
 
@@ -314,46 +499,104 @@ function CreatePageContent() {
 
             <div className="rounded-xl sm:rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-4 sm:p-6">
               <div className="mb-4">
-                <h3 className="text-base sm:text-lg font-semibold text-foreground">Upload video</h3>
-                <p className="text-sm text-muted-foreground mt-1">Select a video file to attach to this project.</p>
+                <h3 className="text-base sm:text-lg font-semibold text-foreground">
+                  {isTemplateUploadRequired ? 'Upload video' : 'Template inputs'}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {isTemplateUploadRequired
+                    ? 'Select a video file to attach to this project.'
+                    : 'This template does not require a video upload. Review the template fields below and start processing when ready.'}
+                </p>
               </div>
 
-              <label className="block">
-                <div className="relative border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 transition-colors bg-background/80">
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                  />
-                  <Upload className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm font-medium text-foreground">
-                    {selectedFileName || 'Drop your video or click to browse'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">MP4, MOV, AVI, WEBM</p>
+              {!isTemplateUploadRequired ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-border bg-background/80 p-4">
+                    <p className="text-sm text-muted-foreground">Template name</p>
+                    <p className="mt-2 text-sm font-semibold text-foreground">
+                      {templateConfig?.name ?? currentProject?.template_type ?? 'Unknown'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {templateConfig?.description ?? 'No additional template description available.'}
+                    </p>
+                  </div>
+
+                  {templateConfig?.settings_schema ? (
+                    <div className="rounded-xl border border-border bg-background/80 p-4 space-y-4">
+                      <h4 className="text-sm font-semibold text-foreground">Template fields</h4>
+                      {Object.entries(templateConfig.settings_schema).map(([fieldKey, fieldSchema]) =>
+                        renderTemplateField(fieldKey, fieldSchema)
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-border bg-background/80 p-4">
+                      <p className="text-sm text-muted-foreground">This template has no configurable fields.</p>
+                    </div>
+                  )}
                 </div>
-              </label>
+              ) : (
+                <>
+                  <label className="block">
+                    <div className="relative border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 transition-colors bg-background/80">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={handleFileChange}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                      <Upload className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+                      <p className="text-sm font-medium text-foreground">
+                        {selectedFileName || 'Drop your video or click to browse'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">MP4, MOV, AVI, WEBM</p>
+                    </div>
+                  </label>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <Button
-                  onClick={handleUpload}
-                  disabled={!canUpload || isUploading}
-                  className="h-11 sm:h-12 font-semibold"
-                >
-                  {isUploading ? 'Uploading...' : 'Upload Video'}
-                </Button>
-                <Button
-                  onClick={handleProcess}
-                  disabled={!canProcess || isProcessing}
-                  className="h-11 sm:h-12 font-semibold"
-                >
-                  {isProcessing ? 'Processing...' : 'Start Processing'}
-                </Button>
-              </div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <Button
+                      onClick={handleUpload}
+                      disabled={!canUpload || isUploading}
+                      className="h-11 sm:h-12 font-semibold"
+                    >
+                      {isUploading ? 'Uploading...' : 'Upload Video'}
+                    </Button>
+                    <Button
+                      onClick={handleProcess}
+                      disabled={!canProcess || isProcessing}
+                      className="h-11 sm:h-12 font-semibold"
+                    >
+                      {isProcessing ? 'Processing...' : 'Start Processing'}
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {!isTemplateUploadRequired && (
+                <div className="mt-5">
+                  <Button
+                    onClick={handleProcess}
+                    disabled={!canProcess || isProcessing}
+                    className="h-11 sm:h-12 font-semibold"
+                  >
+                    {isProcessing ? 'Processing...' : 'Start Processing'}
+                  </Button>
+                </div>
+              )}
 
               <div className="mt-4 rounded-xl border border-border bg-background/80 p-4">
                 <p className="text-sm text-muted-foreground">Selected project template</p>
-                <p className="mt-2 text-sm font-semibold text-foreground">{currentProject?.template_type ?? 'Not selected'}</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">
+                  {templateConfig?.name ?? currentProject?.template_type ?? 'Not selected'}
+                </p>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-border bg-background/80 p-4">
+                <h4 className="text-sm font-semibold text-foreground">Requirements</h4>
+                <div className="mt-2 text-sm text-muted-foreground space-y-1">
+                  {getTemplateRequirementNotes().map((note) => (
+                    <p key={note}>• {note}</p>
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>
@@ -377,6 +620,19 @@ function CreatePageContent() {
                 selectedFilePreview={selectedFilePreview}
                 outputVideoUrl={currentProject?.output_path}
               />
+              {currentProject?.video_path && (
+                <div className="mt-3">
+                  <Button
+                    onClick={() => {
+                      const url = `/editor?projectId=${projectId}`;
+                      window.location.href = url;
+                    }}
+                    size="sm"
+                  >
+                    Edit Video
+                  </Button>
+                </div>
+              )}
             </div>
           </motion.div>
         </div>

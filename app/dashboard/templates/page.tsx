@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   Search, 
@@ -24,192 +24,25 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { useProject } from '@/hooks/useProject'
+import { useTemplates } from '@/hooks/useTemplates'
 
 type DurationType = "all" | "short" | "long"
 type ViewMode = "grid" | "list"
 
-const templates = [
-  {
-    id: 1,
-    title: "Viral Hook Opener",
-    description: "Grab attention in the first 3 seconds with proven hook patterns",
-    platform: "TikTok",
-    duration: 15,
-    durationLabel: "0:15",
-    rating: 4.9,
-    uses: "125K",
-    views: "2.4M",
-    isPremium: false,
-    isNew: true,
-    category: "short",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 2,
-    title: "Product Showcase",
-    description: "Professional product reveal with smooth transitions",
-    platform: "Instagram",
-    duration: 30,
-    durationLabel: "0:30",
-    rating: 4.8,
-    uses: "89K",
-    views: "1.8M",
-    isPremium: true,
-    isNew: false,
-    category: "short",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 3,
-    title: "Tutorial Deep Dive",
-    description: "Step-by-step educational content with chapter markers",
-    platform: "YouTube",
-    duration: 480,
-    durationLabel: "8:00",
-    rating: 4.9,
-    uses: "156K",
-    views: "5.2M",
-    isPremium: true,
-    isNew: false,
-    category: "long",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 4,
-    title: "Story Time",
-    description: "Engaging narrative structure for personal stories",
-    platform: "TikTok",
-    duration: 45,
-    durationLabel: "0:45",
-    rating: 4.7,
-    uses: "67K",
-    views: "890K",
-    isPremium: false,
-    isNew: true,
-    category: "short",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 5,
-    title: "Podcast Highlights",
-    description: "Extract and showcase best moments from longer content",
-    platform: "Shorts",
-    duration: 55,
-    durationLabel: "0:55",
-    rating: 4.6,
-    uses: "34K",
-    views: "450K",
-    isPremium: false,
-    isNew: false,
-    category: "short",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 6,
-    title: "Course Module",
-    description: "Professional online course lesson with slides integration",
-    platform: "YouTube",
-    duration: 900,
-    durationLabel: "15:00",
-    rating: 4.9,
-    uses: "78K",
-    views: "3.1M",
-    isPremium: true,
-    isNew: true,
-    category: "long",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 7,
-    title: "Before & After",
-    description: "Dramatic transformation reveal with split-screen effects",
-    platform: "Instagram",
-    duration: 20,
-    durationLabel: "0:20",
-    rating: 4.8,
-    uses: "112K",
-    views: "2.1M",
-    isPremium: false,
-    isNew: false,
-    category: "short",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 8,
-    title: "Vlog Documentary",
-    description: "Cinematic vlog format with b-roll integration points",
-    platform: "YouTube",
-    duration: 600,
-    durationLabel: "10:00",
-    rating: 4.7,
-    uses: "45K",
-    views: "1.2M",
-    isPremium: true,
-    isNew: false,
-    category: "long",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 9,
-    title: "Quick Tips",
-    description: "Fast-paced educational tips with text overlays",
-    platform: "TikTok",
-    duration: 30,
-    durationLabel: "0:30",
-    rating: 4.6,
-    uses: "56K",
-    views: "780K",
-    isPremium: false,
-    isNew: false,
-    category: "short",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 10,
-    title: "Interview Series",
-    description: "Professional two-person interview layout with lower thirds",
-    platform: "YouTube",
-    duration: 1200,
-    durationLabel: "20:00",
-    rating: 4.8,
-    uses: "23K",
-    views: "890K",
-    isPremium: true,
-    isNew: true,
-    category: "long",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 11,
-    title: "Unboxing Experience",
-    description: "Build anticipation with timed reveals and reactions",
-    platform: "Shorts",
-    duration: 45,
-    durationLabel: "0:45",
-    rating: 4.5,
-    uses: "41K",
-    views: "560K",
-    isPremium: false,
-    isNew: false,
-    category: "short",
-    apiType: 'yt_automation_short',
-  },
-  {
-    id: 12,
-    title: "Webinar Format",
-    description: "Professional presentation with slides and speaker layout",
-    platform: "YouTube",
-    duration: 2700,
-    durationLabel: "45:00",
-    rating: 4.9,
-    uses: "12K",
-    views: "340K",
-    isPremium: true,
-    isNew: false,
-    category: "long",
-    apiType: 'yt_automation_short',
-  },
-]
+type TemplateCard = {
+  templateType: string
+  name: string
+  description: string
+  aspect_ratio?: string
+  platform: string
+  durationLabel: string
+  rating: number
+  uses: string
+  views: string
+  isPremium: boolean
+  isNew: boolean
+  category: "short" | "long"
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -226,45 +59,79 @@ const itemVariants = {
 
 export default function TemplatesPage() {
   const [durationType, setDurationType] = useState<DurationType>("all")
-  const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
-  const [favorites, setFavorites] = useState<number[]>([])
+  const [favorites, setFavorites] = useState<string[]>([])
+  const [templateSettings, setTemplateSettings] = useState<Record<string, any>>({})
+  const [searchQuery, setSearchQuery] = useState("")
   const router = useRouter()
   const { createProject, isCreating, error: projectError } = useProject()
 
-  const filteredTemplates = templates.filter((template) => {
-    const matchesDuration = 
-      durationType === "all" || 
-      (durationType === "short" && template.duration < 60) ||
-      (durationType === "long" && template.duration >= 60)
-    
-    const matchesSearch = 
-      template.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const {
+    templates,
+    selectedTemplateType,
+    templateConfig,
+    status: templatesStatus,
+    error: templatesError,
+    configStatus,
+    loadTemplates,
+    loadTemplateConfig,
+    selectTemplate,
+  } = useTemplates()
+
+  const enrichedTemplates: TemplateCard[] = templates.map((template) => ({
+    templateType: template.templateType,
+    name: template.name,
+    description: template.description,
+    aspect_ratio: template.aspect_ratio,
+    platform: template.aspect_ratio === '9:16' ? 'Shorts' : 'Video',
+    durationLabel: template.aspect_ratio === '9:16' ? '0:30' : '1:00',
+    rating: template.rating ?? 4.8,
+    uses: template.uses ?? 'N/A',
+    views: template.views ?? 'N/A',
+    isPremium: template.isPremium ?? false,
+    isNew: template.isNew ?? false,
+    category: template.category ?? (template.aspect_ratio === '9:16' ? 'short' : 'long'),
+  }))
+
+  const selectedTemplate = enrichedTemplates.find(
+    (template) => template.templateType === selectedTemplateType
+  )
+
+  const filteredTemplates = enrichedTemplates.filter((template) => {
+    const matchesDuration =
+      durationType === "all" ||
+      (durationType === "short" && template.category === 'short') ||
+      (durationType === "long" && template.category === 'long')
+
+    const matchesSearch =
+      template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       template.description.toLowerCase().includes(searchQuery.toLowerCase())
-    
+
     return matchesDuration && matchesSearch
   })
 
-  const toggleFavorite = (id: number) => {
-    setFavorites(prev => 
-      prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
+  const toggleFavorite = (templateType: string) => {
+    setFavorites((prev) =>
+      prev.includes(templateType) ? prev.filter((f) => f !== templateType) : [...prev, templateType]
     )
   }
 
-  const handleUseTemplate = async (template: (typeof templates)[number]) => {
+  const handleUseTemplate = async (template: TemplateCard) => {
     if (isCreating) {
       return
     }
 
     try {
+      const settings = {
+        ...templateSettings,
+      }
+
       const project = await createProject({
-        title: template.title,
-        template_type: template.apiType,
-        settings: {
-          tts_voice: 'am_michael',
-          rewrite_style: 'professional',
-        },
-      });
+        title: template.name,
+        template_type: template.templateType,
+        settings,
+      })
+
       console.log('Project created:', project)
       if (project?.id) {
         router.push(`/dashboard/create?projectId=${project.id}`)
@@ -274,8 +141,123 @@ export default function TemplatesPage() {
     }
   }
 
-  const shortCount = templates.filter(t => t.duration < 60).length
-  const longCount = templates.filter(t => t.duration >= 60).length
+  useEffect(() => {
+      loadTemplates().catch(() => {
+        // ignore failure handled in slice
+      })
+  }, [loadTemplates])
+
+  useEffect(() => {
+    if (templatesStatus === 'succeeded' && enrichedTemplates.length > 0 && !selectedTemplateType) {
+      const firstTemplate = enrichedTemplates[0].templateType
+      selectTemplate(firstTemplate)
+      loadTemplateConfig(firstTemplate).catch(() => {
+        // ignore
+      })
+    }
+  }, [templatesStatus, enrichedTemplates, selectedTemplateType, selectTemplate, loadTemplateConfig])
+
+  useEffect(() => {
+    if (!selectedTemplateType) {
+      return
+    }
+
+    loadTemplateConfig(selectedTemplateType).catch(() => {
+      // ignore
+    })
+  }, [selectedTemplateType, loadTemplateConfig])
+
+  useEffect(() => {
+    if (!templateConfig) {
+      return
+    }
+
+    const defaults: Record<string, any> = {}
+    Object.entries(templateConfig.settings_schema ?? {}).forEach(([fieldKey, fieldSchema]) => {
+      defaults[fieldKey] = fieldSchema.default ?? ''
+    })
+    setTemplateSettings(defaults)
+  }, [templateConfig])
+
+  const shortCount = enrichedTemplates.filter((t) => t.category === 'short').length
+  const longCount = enrichedTemplates.filter((t) => t.category === 'long').length
+
+  const getTemplateRequirementNotes = () => {
+    if (!selectedTemplate || !templateConfig) {
+      return []
+    }
+
+    const notes: string[] = []
+    if (templateConfig.requires_upload === false) {
+      notes.push('No video upload is required for this template.')
+    } else {
+      notes.push('A video upload will be required as part of this workflow.')
+    }
+
+    const requiredFields = Object.entries(templateConfig.settings_schema ?? {})
+      .filter(([, fieldSchema]) => fieldSchema.required)
+      .map(([fieldKey, fieldSchema]) => fieldSchema.label ?? fieldKey)
+
+    if (requiredFields.length > 0) {
+      notes.push(`Required fields: ${requiredFields.join(', ')}.`)
+    }
+
+    return notes
+  }
+
+  const renderFieldInput = (fieldKey: string, fieldSchema: any) => {
+    const value = templateSettings[fieldKey] ?? ''
+
+    const handleChange = (newValue: string) => {
+      setTemplateSettings((prev) => ({
+        ...prev,
+        [fieldKey]: newValue,
+      }))
+    }
+
+    if (fieldSchema.type === 'textarea') {
+      return (
+        <div key={fieldKey} className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">{fieldSchema.label}</label>
+          <textarea
+            value={value}
+            onChange={(event) => handleChange(event.target.value)}
+            placeholder={fieldSchema.placeholder ?? fieldSchema.label}
+            className="w-full min-h-[120px] rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+      )
+    }
+
+    if (fieldSchema.type === 'select' && Array.isArray(fieldSchema.options)) {
+      return (
+        <div key={fieldKey} className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">{fieldSchema.label}</label>
+          <select
+            value={value}
+            onChange={(event) => handleChange(event.target.value)}
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          >
+            {fieldSchema.options.map((option: string) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    return (
+      <div key={fieldKey} className="space-y-2">
+        <label className="block text-sm font-medium text-foreground">{fieldSchema.label}</label>
+        <Input
+          value={value}
+          onChange={(event) => handleChange(event.target.value)}
+          placeholder={fieldSchema.placeholder ?? fieldSchema.label}
+          className="w-full"
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -325,9 +307,9 @@ export default function TemplatesPage() {
         </motion.div>
       </div>
 
-      {projectError && (
+      {(projectError || templatesError) && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {projectError}
+          {projectError || templatesError}
         </div>
       )}
 
@@ -436,6 +418,74 @@ export default function TemplatesPage() {
         </p>
       </div>
 
+      {selectedTemplate && (
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Selected template</p>
+              <h2 className="text-2xl font-semibold text-foreground">{selectedTemplate.name}</h2>
+              <p className="text-sm text-muted-foreground max-w-2xl">{selectedTemplate.description}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {selectedTemplate.aspect_ratio ?? 'Video'}
+              </span>
+              <Button
+                onClick={() => handleUseTemplate(selectedTemplate)}
+                disabled={isCreating}
+              >
+                {isCreating ? 'Creating...' : 'Use this template'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Requirements</h3>
+                <div className="mt-3 space-y-2">
+                  {getTemplateRequirementNotes().map((note) => (
+                    <p key={note} className="text-sm text-muted-foreground">• {note}</p>
+                  ))}
+                  {!templateConfig?.settings_schema && configStatus !== 'loading' && (
+                    <p className="text-sm text-muted-foreground">This template has no configurable fields available.</p>
+                  )}
+                </div>
+              </div>
+
+              {templateConfig?.settings_schema && (
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Template fields</h3>
+                  <div className="mt-3 space-y-4">
+                    {Object.entries(templateConfig.settings_schema).map(([fieldKey, fieldSchema]) =>
+                      renderFieldInput(fieldKey, fieldSchema)
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-border bg-background/80 p-4">
+              <h3 className="text-sm font-semibold text-foreground">Quick summary</h3>
+              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Template type</span>
+                  <span className="font-medium text-foreground">{selectedTemplate.templateType}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Aspect ratio</span>
+                  <span className="font-medium text-foreground">{selectedTemplate.aspect_ratio ?? 'Auto'}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Estimated input</span>
+                  <span className="font-medium text-foreground">{selectedTemplate.category === 'short' ? 'Short form' : 'Long form'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Templates Grid */}
       <AnimatePresence mode="popLayout">
         {viewMode === "grid" ? (
@@ -447,7 +497,7 @@ export default function TemplatesPage() {
           >
             {filteredTemplates.map((template) => (
               <motion.div
-                key={template.id}
+                key={template.templateType}
                 variants={itemVariants}
                 layout
                 className="group"
@@ -482,14 +532,14 @@ export default function TemplatesPage() {
                     <button 
                       onClick={(e) => {
                         e.stopPropagation()
-                        toggleFavorite(template.id)
+                        toggleFavorite(template.templateType)
                       }}
                       className="absolute top-2 right-2 p-1.5 rounded-md bg-background/80 hover:bg-background transition-colors"
                     >
                       <Heart className={cn(
                         "h-4 w-4 transition-colors",
-                        favorites.includes(template.id) 
-                          ? "fill-red-500 text-red-500" 
+                        favorites.includes(template.templateType)
+                          ? "fill-red-500 text-red-500"
                           : "text-muted-foreground"
                       )} />
                     </button>
@@ -506,7 +556,7 @@ export default function TemplatesPage() {
 
                   <CardContent className="p-4">
                     <h3 className="font-semibold text-foreground line-clamp-1">
-                      {template.title}
+                      {template.name}
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                       {template.description}
@@ -542,7 +592,7 @@ export default function TemplatesPage() {
           >
             {filteredTemplates.map((template) => (
               <motion.div
-                key={template.id}
+                key={template.templateType}
                 variants={itemVariants}
                 layout
               >
@@ -565,7 +615,7 @@ export default function TemplatesPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="flex items-center gap-2">
-                              <h3 className="font-semibold text-foreground">{template.title}</h3>
+                              <h3 className="font-semibold text-foreground">{template.name}</h3>
                               {template.isNew && (
                                 <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium rounded">
                                   New
@@ -606,12 +656,12 @@ export default function TemplatesPage() {
                       {/* Actions */}
                       <div className="flex items-center gap-2 shrink-0">
                         <button 
-                          onClick={() => toggleFavorite(template.id)}
+                          onClick={() => toggleFavorite(template.templateType)}
                           className="p-2 rounded-md hover:bg-muted transition-colors"
                         >
                           <Heart className={cn(
                             "h-4 w-4 transition-colors",
-                            favorites.includes(template.id) 
+                            favorites.includes(template.templateType) 
                               ? "fill-red-500 text-red-500" 
                               : "text-muted-foreground"
                           )} />

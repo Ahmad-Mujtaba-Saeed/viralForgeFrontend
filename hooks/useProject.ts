@@ -6,6 +6,7 @@ import {
   fetchProjects as fetchProjectsThunk,
   processProject as processProjectThunk,
   uploadProjectVideo as uploadProjectVideoThunk,
+  updateProject as updateProjectThunk,
   Project,
 } from '@/store/projectSlice'
 
@@ -49,11 +50,19 @@ export function useProject() {
     [dispatch]
   )
 
+  const updateProject = useCallback(
+    async (payload: { projectId: number | string; data: Partial<Project> }) => {
+      return await dispatch(updateProjectThunk(payload)).unwrap()
+    },
+    [dispatch]
+  )
+
   return {
     ...projectState,
     createProject,
     uploadProjectVideo,
     processProject,
+    updateProject,
     fetchProjects,
     fetchProjectById,
   }
