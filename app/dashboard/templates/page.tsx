@@ -447,22 +447,8 @@ export default function TemplatesPage() {
                   {getTemplateRequirementNotes().map((note) => (
                     <p key={note} className="text-sm text-muted-foreground">• {note}</p>
                   ))}
-                  {!templateConfig?.settings_schema && configStatus !== 'loading' && (
-                    <p className="text-sm text-muted-foreground">This template has no configurable fields available.</p>
-                  )}
                 </div>
               </div>
-
-              {templateConfig?.settings_schema && (
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">Template fields</h3>
-                  <div className="mt-3 space-y-4">
-                    {Object.entries(templateConfig.settings_schema).map(([fieldKey, fieldSchema]) =>
-                      renderFieldInput(fieldKey, fieldSchema)
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="rounded-2xl border border-border bg-background/80 p-4">

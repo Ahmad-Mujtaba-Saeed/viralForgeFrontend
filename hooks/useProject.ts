@@ -7,6 +7,7 @@ import {
   processProject as processProjectThunk,
   uploadProjectVideo as uploadProjectVideoThunk,
   updateProject as updateProjectThunk,
+  uploadProjectSettingFile as uploadProjectSettingFileThunk,
   Project,
 } from '@/store/projectSlice'
 
@@ -57,10 +58,18 @@ export function useProject() {
     [dispatch]
   )
 
+  const uploadProjectSettingFile = useCallback(
+    async (payload: { projectId: number | string; fieldKey: string; file: File }) => {
+      return await dispatch(uploadProjectSettingFileThunk(payload)).unwrap()
+    },
+    [dispatch]
+  )
+
   return {
     ...projectState,
     createProject,
     uploadProjectVideo,
+    uploadProjectSettingFile,
     processProject,
     updateProject,
     fetchProjects,

@@ -92,6 +92,31 @@ export const uploadProjectVideo = createAsyncThunk(
   }
 )
 
+export const uploadProjectSettingFile = createAsyncThunk(
+  'project/uploadSettingFile',
+  async (
+    payload: { projectId: number | string; fieldKey: string; file: File },
+    { rejectWithValue }
+  ) => {
+    try {
+      const formData = new FormData()
+      formData.append('file', payload.file)
+      formData.append('field_key', payload.fieldKey)
+
+      const response = await api.post(
+        `/api/projects/${payload.projectId}/upload-setting-file`,
+        formData
+      )
+
+      return response.data.data as { path: string; file_name: string }
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.message || error.message || 'Failed to upload setting file'
+      )
+    }
+  }
+)
+
 export const processProject = createAsyncThunk(
   'project/process',
   async (projectId: number | string, { rejectWithValue }) => {
@@ -219,6 +244,20 @@ const projectSlice = createSlice({
         state.error = null
       })
       .addCase(uploadProjectVideo.rejected, (state, action) => {
+        state.isUploading = false
+        state.error = action.payload as string
+      })
+
+    builder
+      .addCase(uploadProjectSettingFile.pending, (state) => {
+        state.isUploading = true
+        state.error = null
+      })
+      .addCase(uploadProjectSettingFile.fulfilled, (state) => {
+        state.isUploading = false
+        state.error = null
+      })
+      .addCase(uploadProjectSettingFile.rejected, (state, action) => {
         state.isUploading = false
         state.error = action.payload as string
       })

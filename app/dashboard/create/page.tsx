@@ -25,6 +25,7 @@ function CreatePageContent() {
     error,
     fetchProjectById,
     uploadProjectVideo,
+    uploadProjectSettingFile,
     updateProject,
     processProject,
   } = useProject()
@@ -52,6 +53,8 @@ function CreatePageContent() {
     loadTemplateConfig(selectedTemplateType).catch(() => {
       // ignore failure handled in slice
     })
+    console.log('Loading template config for type:', selectedTemplateType)
+    console.log('Loaded template config:', templateConfig)
   }, [selectedTemplateType, loadTemplateConfig])
 
   useEffect(() => {
@@ -75,6 +78,17 @@ function CreatePageContent() {
     return typeof fieldSchema.required === 'boolean' ? fieldSchema.required : false
   }
 
+  const isFieldVisible = (fieldKey: string, fieldSchema: any) => {
+    if (!fieldSchema.visible_when) {
+      return true
+    }
+
+    // visible_when is an object like: { input_mode: 'youtube_url' }
+    return Object.entries(fieldSchema.visible_when).every(([conditionField, conditionValue]) => {
+      return templateSettings[conditionField] === conditionValue
+    })
+  }
+
   const getFieldValue = (fieldKey: string, fieldSchema: any) => {
     return templateSettings[fieldKey] ?? fieldSchema.default ?? (fieldSchema.type === 'checkbox' ? false : '')
   }
@@ -85,12 +99,24 @@ function CreatePageContent() {
     }
 
     const missingFields = Object.entries(templateConfig.settings_schema)
-      .filter(([fieldKey, fieldSchema]) => isFieldRequired(fieldKey, fieldSchema))
-      .filter(([fieldKey]) => {
-        const value = String(
-          templateSettings[fieldKey] ?? templateConfig.settings_schema?.[fieldKey]?.default ?? ''
+      .filter(([fieldKey, fieldSchema]) => isFieldVisible(fieldKey, fieldSchema) && isFieldRequired(fieldKey, fieldSchema))
+      .filter(([fieldKey, fieldSchema]) => {
+        const value = templateSettings[fieldKey]
+
+        // Special case: if fieldKey is video_file and project already has a video_path, it's satisfied
+        if (fieldKey === 'video_file' && currentProject?.video_path) {
+          return false
+        }
+
+        if (fieldSchema.type === 'file') {
+          // Missing if not a File object and not a non-empty string path
+          return !(value instanceof File) && (!value || String(value).trim().length === 0)
+        }
+
+        const strValue = String(
+          value ?? templateConfig.settings_schema?.[fieldKey]?.default ?? ''
         ).trim()
-        return value.length === 0
+        return strValue.length === 0
       })
 
     if (missingFields.length > 0) {
@@ -131,6 +157,32 @@ function CreatePageContent() {
       )
     }
 
+    if (fieldSchema.type === 'radio' && typeof fieldSchema.options === 'object') {
+      return (
+        <div key={fieldKey} className="space-y-3">
+          <label className="block text-sm font-medium text-foreground">{label}</label>
+          <div className="space-y-2">
+            {Object.entries(fieldSchema.options).map(([optionValue, optionLabel]) => (
+              <div key={optionValue} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  id={`${fieldKey}-${optionValue}`}
+                  name={fieldKey}
+                  value={optionValue}
+                  checked={value === optionValue}
+                  onChange={(event) => handleSettingChange(event.target.value)}
+                  className="h-4 w-4 text-primary focus:ring-primary"
+                />
+                <label htmlFor={`${fieldKey}-${optionValue}`} className="text-sm text-foreground cursor-pointer">
+                  {optionLabel as string}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
     if (fieldSchema.type === 'select' && Array.isArray(fieldSchema.options)) {
       return (
         <div key={fieldKey} className="space-y-2">
@@ -140,10 +192,64 @@ function CreatePageContent() {
             onChange={(event) => handleSettingChange(event.target.value)}
             className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
           >
+            <option value="">-- Select an option --</option>
             {fieldSchema.options.map((option: string) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
+        </div>
+      )
+    }
+
+    if (fieldSchema.type === 'select' && typeof fieldSchema.options === 'object' && !Array.isArray(fieldSchema.options)) {
+      return (
+        <div key={fieldKey} className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">{label}</label>
+          <select
+            value={value}
+            onChange={(event) => handleSettingChange(event.target.value)}
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          >
+            <option value="">-- Select an option --</option>
+            {Object.entries(fieldSchema.options).map(([optionValue, optionLabel]) => (
+              <option key={optionValue} value={optionValue}>{optionLabel as string}</option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    if (fieldSchema.type === 'file') {
+      // Determine file display name
+      const isFileUploaded = value && typeof value === 'string'
+      const isFileSelected = value instanceof File
+      const displayName = isFileSelected
+        ? (value as File).name
+        : isFileUploaded
+          ? (value as string).split('/').pop()
+          : fieldKey === 'video_file' && currentProject?.video_path
+            ? currentProject.video_path.split('/').pop()
+            : ''
+
+      return (
+        <div key={fieldKey} className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">{label}</label>
+          <input
+            type="file"
+            accept={fieldSchema.accept ?? '*'}
+            onChange={(event) => handleSettingChange(event.target.files?.[0] ?? '')}
+            className="w-full px-3 py-2 text-sm text-foreground rounded-xl border border-border bg-background file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+          />
+          {displayName && (
+            <p className="text-xs text-green-600 font-medium">
+              {isFileSelected ? 'Selected: ' : 'Currently uploaded: '}{displayName}
+            </p>
+          )}
+          {fieldSchema.max_size && (
+            <p className="text-xs text-muted-foreground">
+              Max file size: {(fieldSchema.max_size / 1024 / 1024).toFixed(0)} MB
+            </p>
+          )}
         </div>
       )
     }
@@ -185,7 +291,7 @@ function CreatePageContent() {
     }
 
     const requiredFields = Object.entries(templateConfig?.settings_schema ?? {})
-      .filter(([, fieldSchema]) => fieldSchema.required)
+      .filter(([fieldKey, fieldSchema]) => isFieldVisible(fieldKey, fieldSchema) && fieldSchema.required)
       .map(([fieldKey, fieldSchema]) => fieldSchema.label ?? fieldKey)
 
     if (requiredFields.length > 0) {
@@ -315,6 +421,23 @@ function CreatePageContent() {
     }
   }
 
+  const sanitizeSettingsForBackend = (settings: Record<string, any>) => {
+    const sanitized: Record<string, any> = {}
+    
+    Object.entries(settings).forEach(([key, value]) => {
+      const fieldSchema = templateConfig?.settings_schema?.[key]
+      
+      // For file fields, convert File objects to empty strings
+      if (fieldSchema?.type === 'file') {
+        sanitized[key] = value instanceof File ? '' : (value ?? '')
+      } else {
+        sanitized[key] = value ?? ''
+      }
+    })
+    
+    return sanitized
+  }
+
   const handleProcess = async () => {
     if (!projectId || !currentProject) {
       return
@@ -332,16 +455,58 @@ function CreatePageContent() {
     }
 
     try {
-      const settingsChanged = JSON.stringify(currentProject.settings ?? {}) !== JSON.stringify(templateSettings)
+      // 1. Upload any File objects in templateSettings first
+      const updatedSettings = { ...templateSettings }
+      let latestProject = currentProject
+
+      for (const [key, value] of Object.entries(templateSettings)) {
+        if (value instanceof File) {
+          if (key === 'video_file') {
+            // Upload main video using existing hook
+            latestProject = await uploadProjectVideo({
+              projectId: Number(projectId),
+              video: value,
+            })
+            // Extract relative storage path from the full URL returned by API Resource
+            const pathUrl = latestProject.video_path ?? ''
+            const storageIndex = pathUrl.indexOf('/storage/')
+            const relativePath = storageIndex !== -1 ? pathUrl.substring(storageIndex + 9) : pathUrl
+            // Update the settings key to the relative video path
+            updatedSettings[key] = relativePath
+          } else {
+            // Upload settings file using new generic endpoint
+            const uploadResult = await uploadProjectSettingFile({
+              projectId: Number(projectId),
+              fieldKey: key,
+              file: value,
+            })
+            // Update the settings key to the returned file path
+            updatedSettings[key] = uploadResult.path
+          }
+        }
+      }
+
+      // 2. Sanitize and save updated settings to backend
+      const sanitizedSettings = sanitizeSettingsForBackend(updatedSettings)
+      const settingsChanged = JSON.stringify(currentProject.settings ?? {}) !== JSON.stringify(sanitizedSettings)
+      
       if (settingsChanged) {
         await updateProject({
           projectId: Number(projectId),
-          data: { settings: templateSettings },
+          data: { settings: sanitizedSettings },
         })
       }
+
+      // Extra check: if in upload mode, ensure a video path actually exists
+      if (sanitizedSettings.input_mode === 'upload' && !latestProject.video_path) {
+        setLocalError('Please select and upload a source video file.')
+        return
+      }
+
+      // 3. Start processing
       await processProject(Number(projectId))
-    } catch (error) {
-      setLocalError('Failed to start processing. Please try again.')
+    } catch (error: any) {
+      setLocalError(error?.message || error || 'Failed to start processing. Please try again.')
       console.error(error)
     }
   }
@@ -525,7 +690,7 @@ function CreatePageContent() {
                     <div className="rounded-xl border border-border bg-background/80 p-4 space-y-4">
                       <h4 className="text-sm font-semibold text-foreground">Template fields</h4>
                       {Object.entries(templateConfig.settings_schema).map(([fieldKey, fieldSchema]) =>
-                        renderTemplateField(fieldKey, fieldSchema)
+                        isFieldVisible(fieldKey, fieldSchema) ? renderTemplateField(fieldKey, fieldSchema) : null
                       )}
                     </div>
                   ) : (
@@ -536,6 +701,18 @@ function CreatePageContent() {
                 </div>
               ) : (
                 <>
+                  {templateConfig?.settings_schema ? (
+                    <div className="rounded-xl border border-border bg-background/80 p-4 space-y-4">
+                      <h4 className="text-sm font-semibold text-foreground">Template fields</h4>
+                      {Object.entries(templateConfig.settings_schema).map(([fieldKey, fieldSchema]) =>
+                        isFieldVisible(fieldKey, fieldSchema) ? renderTemplateField(fieldKey, fieldSchema) : null
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-border bg-background/80 p-4">
+                      <p className="text-sm text-muted-foreground">This template has no configurable fields.</p>
+                    </div>
+                  )}
                   <label className="block">
                     <div className="relative border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 transition-colors bg-background/80">
                       <input
