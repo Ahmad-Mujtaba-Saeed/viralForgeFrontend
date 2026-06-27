@@ -1,0 +1,533 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useParams } from 'next/navigation'
+import api from '@/lib/axios'
+import {
+  Loader2, Upload, X, Film, RefreshCw, Play, AlertTriangle,
+  Image as ImageIcon, LayoutGrid, Columns2, Square, Shuffle, Move,
+  Rows2, PanelRight, PanelTop, MessageSquare, Volume2, VolumeX, Music, Music2,
+} from 'lucide-react'
+
+interface Slot {
+  content_type: string
+  label?: string
+  camera_move?: string
+  asset_request?: { description?: string }
+  asset?: { url: string; type: string; name?: string } | null
+  heading?: string
+  bullets?: string[]
+  body?: string
+  dock?: string
+  width_pct?: number
+}
+interface Scene {
+  scene_id: string
+  order: number
+  duration_seconds: number
+  narration: string
+  layout_template: string
+  transition: string
+  slots: Record<string, Slot>
+}
+interface Theme {
+  name: string
+  label: string
+  bg_from: string
+  bg_to: string
+  accent: string
+  accent2: string
+  text: string
+  muted: string
+}
+interface Storyboard {
+  id: number
+  title: string
+  status: string
+  progress: number
+  aspect_ratio: string
+  error_message?: string | null
+  output_url?: string | null
+  scenes: Scene[]
+  missing_slots: { scene_id: string; slot_key: string }[]
+  ready_to_render: boolean
+  templates: Record<string, { label: string; slots: Record<string, unknown> }>
+  color_scheme?: string | null
+  theme?: Theme
+  camera_moves?: string[]
+  transitions?: string[]
+  color_schemes?: Theme[]
+  narration_enabled?: boolean
+  music_enabled?: boolean
+}
+
+const TEMPLATE_ICON: Record<string, React.ReactNode> = {
+  single_focus: <Square className="h-4 w-4" />,
+  split_side_by_side: <Columns2 className="h-4 w-4" />,
+  split_top_bottom: <Rows2 className="h-4 w-4" />,
+  full_bleed_with_side_panel: <PanelRight className="h-4 w-4" />,
+  full_bleed_with_banner: <PanelTop className="h-4 w-4" />,
+}
+
+export default function StoryboardPage() {
+  const { id } = useParams<{ id: string }>()
+  const [board, setBoard] = useState<Storyboard | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [rendering, setRendering] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchBoard = useCallback(async () => {
+    try {
+      const res = await api.get(`/api/explainer/projects/${id}/storyboard`)
+      setBoard(res.data.data)
+    } catch {
+      // ignore transient errors during polling
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  useEffect(() => {
+    fetchBoard()
+  }, [fetchBoard])
+
+  // Poll while the backend is working (analyzing or rendering).
+  useEffect(() => {
+    const busy = board && ['analyzing', 'processing'].includes(board.status)
+    if (busy && !pollRef.current) {
+      pollRef.current = setInterval(fetchBoard, 3000)
+    }
+    if (!busy && pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [board, fetchBoard])
+
+  const handleRender = async () => {
+    setRendering(true)
+    try {
+      await api.post(`/api/explainer/projects/${id}/render`)
+      await fetchBoard()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to start render')
+    } finally {
+      setRendering(false)
+    }
+  }
+
+  const handleReanalyze = async () => {
+    if (!confirm('Re-run analysis? This replaces the current storyboard and uploads.')) return
+    try {
+      await api.post(`/api/explainer/projects/${id}/reanalyze`)
+      await fetchBoard()
+    } catch {
+      alert('Failed to re-analyze')
+    }
+  }
+
+  const handleShuffleTheme = async () => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/shuffle-theme`)
+      await fetchBoard()
+    } catch {
+      alert('Failed to shuffle theme')
+    }
+  }
+
+  const handleToggleNarration = async () => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/narration`, { enabled: !(board?.narration_enabled ?? true) })
+      await fetchBoard()
+    } catch {
+      alert('Failed to toggle voiceover')
+    }
+  }
+
+  const handleToggleMusic = async () => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/music`, { enabled: !(board?.music_enabled ?? true) })
+      await fetchBoard()
+    } catch {
+      alert('Failed to toggle background music')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center text-muted-foreground">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading storyboard...
+      </div>
+    )
+  }
+
+  if (!board) {
+    return <div className="p-10 text-center text-muted-foreground">Project not found.</div>
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{board.title}</h1>
+          <p className="text-sm text-muted-foreground">
+            {board.scenes.length} scenes · {board.aspect_ratio} · status:{' '}
+            <span className="font-medium text-foreground">{board.status}</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleToggleNarration}
+            className="inline-flex items-center gap-2 rounded-lg border border-input px-4 py-2 text-sm hover:bg-muted"
+            title="AI voiceover (fal Chatterbox)"
+          >
+            {(board.narration_enabled ?? true) ? <Volume2 className="h-4 w-4 text-sky-400" /> : <VolumeX className="h-4 w-4" />}
+            Voiceover {(board.narration_enabled ?? true) ? 'On' : 'Off'}
+          </button>
+          <button
+            onClick={handleToggleMusic}
+            className="inline-flex items-center gap-2 rounded-lg border border-input px-4 py-2 text-sm hover:bg-muted"
+            title="Curated background music (by scene mood)"
+          >
+            {(board.music_enabled ?? true) ? <Music className="h-4 w-4 text-sky-400" /> : <Music2 className="h-4 w-4 text-muted-foreground" />}
+            Music {(board.music_enabled ?? true) ? 'On' : 'Off'}
+          </button>
+          <button
+            onClick={handleReanalyze}
+            className="inline-flex items-center gap-2 rounded-lg border border-input px-4 py-2 text-sm hover:bg-muted"
+          >
+            <RefreshCw className="h-4 w-4" /> Re-analyze
+          </button>
+        </div>
+      </header>
+
+      {board.theme && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-input bg-card p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              {[board.theme.bg_to, board.theme.accent, board.theme.accent2, board.theme.text].map((c, i) => (
+                <span key={i} className="h-6 w-6 rounded-full border border-white/10" style={{ background: c }} />
+              ))}
+            </div>
+            <div className="text-sm">
+              <span className="text-muted-foreground">Color scheme: </span>
+              <span className="font-semibold">{board.theme.label}</span>
+            </div>
+          </div>
+          <button
+            onClick={handleShuffleTheme}
+            className="inline-flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            <Shuffle className="h-4 w-4" /> Shuffle colors
+          </button>
+        </div>
+      )}
+
+      <StatusBanner board={board} />
+
+      {board.status === 'completed' && board.output_url && (
+        <div className="mb-8 overflow-hidden rounded-xl border border-input bg-black">
+          <video src={board.output_url} controls className="w-full" />
+          <div className="flex items-center justify-between p-3">
+            <span className="text-sm text-muted-foreground">Final render</span>
+            <a
+              href={board.output_url}
+              download
+              className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600"
+            >
+              <Play className="h-4 w-4" /> Download MP4
+            </a>
+          </div>
+        </div>
+      )}
+
+      {board.status === 'analyzing' ? (
+        <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-input text-muted-foreground">
+          <Loader2 className="mb-3 h-6 w-6 animate-spin" />
+          Breaking your script into scenes...
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {board.scenes.map((scene) => (
+            <SceneCard
+              key={scene.scene_id}
+              projectId={id}
+              scene={scene}
+              board={board}
+              cameraMoves={board.camera_moves || []}
+              onChange={fetchBoard}
+            />
+          ))}
+        </div>
+      )}
+
+      {board.scenes.length > 0 && board.status !== 'analyzing' && (
+        <div className="sticky bottom-4 mt-8 flex items-center justify-between gap-4 rounded-xl border border-input bg-background/95 p-4 shadow-lg backdrop-blur">
+          <div className="text-sm">
+            {board.ready_to_render ? (
+              <span className="text-emerald-500">All assets uploaded — ready to render.</span>
+            ) : (
+              <span className="text-amber-500">
+                {board.missing_slots.length} image slot(s) still need an upload.
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleRender}
+            disabled={!board.ready_to_render || rendering || board.status === 'processing'}
+            className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
+          >
+            {board.status === 'processing' ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Rendering {board.progress}%</>
+            ) : (
+              <><Film className="h-4 w-4" /> Approve & Render</>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatusBanner({ board }: { board: Storyboard }) {
+  if (board.status === 'failed' && board.error_message) {
+    return (
+      <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>{board.error_message}</span>
+      </div>
+    )
+  }
+  if (board.status === 'processing') {
+    return (
+      <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full bg-sky-500 transition-all" style={{ width: `${board.progress}%` }} />
+      </div>
+    )
+  }
+  return null
+}
+
+function SceneCard({
+  projectId, scene, board, cameraMoves, onChange,
+}: {
+  projectId: string
+  scene: Scene
+  board: Storyboard
+  cameraMoves: string[]
+  onChange: () => void
+}) {
+  const templateLabel = board.templates?.[scene.layout_template]?.label || scene.layout_template
+  const slotKeys = Object.keys(scene.slots)
+
+  const updateTransition = async (t: string) => {
+    try {
+      await api.patch(`/api/explainer/projects/${projectId}/scenes/${scene.scene_id}`, { transition: t })
+      await onChange()
+    } catch {
+      alert('Failed to update transition')
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-input bg-card p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/15 text-xs font-bold text-sky-400">
+            {scene.order}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium">
+            {TEMPLATE_ICON[scene.layout_template] || <LayoutGrid className="h-4 w-4" />}
+            {templateLabel}
+          </span>
+          <span className="text-xs text-muted-foreground">{scene.duration_seconds}s</span>
+        </div>
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Film className="h-3 w-3" /> transition
+          <select
+            value={scene.transition}
+            onChange={(e) => updateTransition(e.target.value)}
+            className="rounded border border-input bg-background px-1.5 py-0.5 text-[11px] outline-none focus:ring-1 focus:ring-sky-500"
+          >
+            {(board.transitions || []).map((t) => (
+              <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {scene.narration && (
+        <p className="mb-3 text-sm italic text-muted-foreground">“{scene.narration}”</p>
+      )}
+
+      <div className={`grid gap-3 ${slotKeys.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+        {slotKeys.map((slotKey) => (
+          <SlotCard
+            key={slotKey}
+            projectId={projectId}
+            sceneId={scene.scene_id}
+            slotKey={slotKey}
+            slot={scene.slots[slotKey]}
+            cameraMoves={cameraMoves}
+            onChange={onChange}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SlotCard({
+  projectId, sceneId, slotKey, slot, cameraMoves, onChange,
+}: {
+  projectId: string
+  sceneId: string
+  slotKey: string
+  slot: Slot
+  cameraMoves: string[]
+  onChange: () => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const updateCameraMove = async (move: string) => {
+    try {
+      await api.patch(`/api/explainer/projects/${projectId}/scenes/${sceneId}/slots/${slotKey}`, {
+        camera_move: move,
+      })
+      await onChange()
+    } catch {
+      alert('Failed to update camera move')
+    }
+  }
+
+  const upload = async (file: File) => {
+    setUploading(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      await api.post(
+        `/api/explainer/projects/${projectId}/scenes/${sceneId}/slots/${slotKey}/asset`,
+        fd
+      )
+      await onChange()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const remove = async () => {
+    try {
+      await api.delete(`/api/explainer/projects/${projectId}/scenes/${sceneId}/slots/${slotKey}/asset`)
+      await onChange()
+    } catch {
+      alert('Failed to remove asset')
+    }
+  }
+
+  const dockBadge = slot.dock ? (
+    <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{slot.dock}</span>
+  ) : null
+
+  if (slot.content_type === 'text_block') {
+    return (
+      <div className="rounded-lg border border-input bg-muted/40 p-3">
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{slotKey}{dockBadge}</div>
+        {slot.heading && <div className="font-semibold text-sky-400">{slot.heading}</div>}
+        <ul className="mt-1 space-y-0.5 text-sm">
+          {(slot.bullets || []).map((b, i) => (
+            <li key={i} className="flex gap-1.5"><span className="text-sky-400">›</span>{b}</li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
+  if (slot.content_type === 'explanation_box') {
+    return (
+      <div className="rounded-lg border border-input bg-muted/40 p-3">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{slotKey}{dockBadge}</span>
+          <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+        {slot.heading && <div className="font-semibold text-sky-400">{slot.heading}</div>}
+        {slot.body && <p className="mt-1 text-sm text-muted-foreground">{slot.body}</p>}
+      </div>
+    )
+  }
+
+  // image / video slot
+  return (
+    <div className="rounded-lg border border-input bg-muted/40 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {slotKey} {slot.label ? `· ${slot.label}` : ''}
+        </div>
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <Move className="h-3 w-3" />
+          <select
+            value={slot.camera_move || ''}
+            onChange={(e) => updateCameraMove(e.target.value)}
+            className="rounded border border-input bg-background px-1.5 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-sky-500"
+            title="Camera movement"
+          >
+            {cameraMoves.map((m) => (
+              <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {slot.asset?.url ? (
+        <div className="relative overflow-hidden rounded-md">
+          {slot.asset.type === 'video' ? (
+            <video src={slot.asset.url} className="h-32 w-full object-cover" muted />
+          ) : (
+            <img src={slot.asset.url} alt="" className="h-32 w-full object-cover" />
+          )}
+          <button
+            onClick={remove}
+            className="absolute right-1.5 top-1.5 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-input text-center text-xs text-muted-foreground hover:border-sky-500 hover:text-sky-400"
+        >
+          {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+          <span className="px-2">{slot.asset_request?.description || 'Upload media'}</span>
+        </button>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,video/mp4"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) upload(f)
+          e.target.value = ''
+        }}
+      />
+
+      {!slot.asset?.url && slot.asset_request?.description && (
+        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+          <ImageIcon className="mt-0.5 h-3 w-3 shrink-0" />
+          {slot.asset_request.description}
+        </p>
+      )}
+    </div>
+  )
+}

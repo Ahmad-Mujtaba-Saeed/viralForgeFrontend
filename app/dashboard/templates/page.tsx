@@ -121,6 +121,12 @@ export default function TemplatesPage() {
       return
     }
 
+    // The AI Explainer template has its own script -> storyboard -> render flow.
+    if (template.templateType === 'ai_explainer_video') {
+      router.push('/dashboard/explainer')
+      return
+    }
+
     try {
       const settings = {
         ...templateSettings,

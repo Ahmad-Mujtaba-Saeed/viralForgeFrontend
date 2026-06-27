@@ -19,6 +19,7 @@ export default function ProjectsPage() {
     fetchProjects,
   } = useProject()
   const [retryingId, setRetryingId] = useState<number | null>(null)
+  const [retryErrors, setRetryErrors] = useState<Record<number, string>>({})
 
   useEffect(() => {
     fetchProjects().catch(() => {})
@@ -31,12 +32,14 @@ export default function ProjectsPage() {
   const handleRetryProject = async (e: React.MouseEvent, projectId: number) => {
     e.stopPropagation()
     setRetryingId(projectId)
+    setRetryErrors((prev) => { const next = { ...prev }; delete next[projectId]; return next })
 
     try {
       await dispatch(retryProject(projectId)).unwrap()
       await fetchProjects()
     } catch (err: any) {
-      console.error('Failed to retry project:', err)
+      const message = typeof err === 'string' ? err : err?.message || 'Failed to retry. Please try again.'
+      setRetryErrors((prev) => ({ ...prev, [projectId]: message }))
     } finally {
       setRetryingId(null)
     }
@@ -117,6 +120,12 @@ export default function ProjectsPage() {
                           <p className="text-xs text-orange-800 mt-1">
                             Failed at: <span className="font-medium capitalize">{project.failed_step.replace(/_/g, ' ')}</span>
                           </p>
+                        )}
+                        {project.error_message && (
+                          <p className="text-xs text-orange-700 mt-1 break-words">{project.error_message}</p>
+                        )}
+                        {retryErrors[project.id] && (
+                          <p className="text-xs text-red-700 mt-1">{retryErrors[project.id]}</p>
                         )}
                       </div>
                     </div>
