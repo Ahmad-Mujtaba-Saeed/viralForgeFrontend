@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Video,
   Wand2,
+
   FolderOpen,
   BarChart3,
   Settings,
@@ -17,6 +18,7 @@ import {
   ChevronRight,
   Plus,
   LayoutTemplate,
+  CreditCard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -31,9 +33,9 @@ const mainNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
   { icon: Video, label: "My Videos", href: "/dashboard/videos" },
   { icon: LayoutTemplate, label: "Templates", href: "/dashboard/templates" },
-  { icon: Wand2, label: "Create", href: "/dashboard/create" },
   { icon: FolderOpen, label: "Projects", href: "/dashboard/projects" },
-  { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
+  { icon: Wand2, label: "AI Explainer Video", href: "/dashboard/explainer" },
+  { icon: CreditCard, label: "Billing & Credits", href: "/dashboard/billing" },
 ]
 
 const bottomNavItems = [
@@ -59,8 +61,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       >
         {/* Header */}
         <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary shadow-soft">
               <Flame className="h-5 w-5 text-sidebar-primary-foreground" />
             </div>
             <AnimatePresence mode="wait">
@@ -70,7 +72,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   animate={{ opacity: 1, width: "auto" }}
                   exit={{ opacity: 0, width: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="text-xl font-bold text-sidebar-foreground overflow-hidden whitespace-nowrap"
+                  className="font-display text-xl font-semibold tracking-tight text-sidebar-foreground overflow-hidden whitespace-nowrap"
                 >
                   ViralForge
                 </motion.span>
@@ -96,24 +98,27 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
+                asChild
                 className={cn(
-                  "w-full bg-sidebar-primary hover:bg-sidebar-primary/90 text-sidebar-primary-foreground",
+                  "w-full rounded-xl bg-sidebar-primary hover:bg-sidebar-primary/90 text-sidebar-primary-foreground font-semibold shadow-soft",
                   collapsed ? "justify-center px-0" : "justify-start gap-2"
                 )}
               >
-                <Plus className="h-4 w-4" />
-                <AnimatePresence mode="wait">
-                  {!collapsed && (
-                    <motion.span
-                      initial={{ opacity: 0, width: 0 }}
-                      animate={{ opacity: 1, width: "auto" }}
-                      exit={{ opacity: 0, width: 0 }}
-                      className="overflow-hidden whitespace-nowrap"
-                    >
-                      New Video
-                    </motion.span>
-                  )}
-                </AnimatePresence>
+                <Link href="/dashboard/templates">
+                  <Plus className="h-4 w-4" />
+                  <AnimatePresence mode="wait">
+                    {!collapsed && (
+                      <motion.span
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: "auto" }}
+                        exit={{ opacity: 0, width: 0 }}
+                        className="overflow-hidden whitespace-nowrap"
+                      >
+                        New Video
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </Link>
               </Button>
             </TooltipTrigger>
             {collapsed && (
@@ -136,10 +141,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       <Link
                         href={item.href}
                         className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
                           isActive
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                            ? "bg-card text-primary shadow-soft border border-sidebar-border"
+                            : "text-sidebar-foreground/70 hover:bg-card/60 hover:text-sidebar-foreground",
                           collapsed && "justify-center px-0"
                         )}
                       >
@@ -182,10 +187,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       <Link
                         href={item.href}
                         className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
                           isActive
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                            ? "bg-card text-primary shadow-soft border border-sidebar-border"
+                            : "text-sidebar-foreground/70 hover:bg-card/60 hover:text-sidebar-foreground",
                           collapsed && "justify-center px-0"
                         )}
                       >

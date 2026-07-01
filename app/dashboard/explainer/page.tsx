@@ -45,60 +45,63 @@ export default function ExplainerCreatePage() {
     }
   }
 
+  const inputCls =
+    'w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none transition-colors focus:border-primary'
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
-      <div className="mb-8 flex items-center gap-3">
-        <div className="rounded-xl bg-sky-500/10 p-3 text-sky-400">
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-8 flex items-center gap-3.5">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-soft">
           <Sparkles className="h-6 w-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">AI Explainer Video</h1>
-          <p className="text-sm text-muted-foreground">
-            Write a script. AI breaks it into scenes and picks layouts; you upload the visuals; it renders an edited video.
+          <h1 className="font-display text-[26px] font-semibold tracking-tight text-foreground">AI Explainer Video</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Write a script. AI breaks it into scenes and picks layouts; you upload visuals; it renders an edited video.
           </p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-border bg-card p-6 shadow-soft">
         <div>
-          <label className="mb-2 block text-sm font-medium">Title</label>
+          <label className="mb-2 block text-[13px] font-semibold text-foreground">Title</label>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="GTA V vs GTA VI — Map Comparison"
-            className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+            className={inputCls}
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium">Script</label>
+          <label className="mb-2 block text-[13px] font-semibold text-foreground">Script</label>
           <textarea
             value={script}
             onChange={(e) => setScript(e.target.value)}
             rows={10}
             placeholder="Paste or write your script here. e.g. 'Today we compare the maps of GTA V and GTA VI...'"
-            className="w-full resize-y rounded-lg border border-input bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+            className={`${inputCls} resize-y leading-relaxed`}
           />
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1.5 text-xs text-ink3">
             The AI will split this into scenes and decide where images vs. bullet points go.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
-            <label className="mb-2 block text-sm font-medium">Aspect ratio</label>
-            <select
-              value={aspectRatio}
-              onChange={(e) => setAspectRatio(e.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"
-            >
+            <label className="mb-2 block text-[13px] font-semibold text-foreground">Aspect ratio</label>
+            <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className={inputCls}>
               {ASPECT_RATIOS.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium">Target length: {targetSeconds}s</label>
+            <label className="mb-2 block text-[13px] font-semibold text-foreground">
+              Target length: <span className="text-primary">{targetSeconds}s</span>
+            </label>
             <input
               type="range"
               min={20}
@@ -106,24 +109,22 @@ export default function ExplainerCreatePage() {
               step={10}
               value={targetSeconds}
               onChange={(e) => setTargetSeconds(Number(e.target.value))}
-              className="w-full accent-sky-500"
+              className="mt-3 w-full accent-[var(--primary)]"
             />
           </div>
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-            {error}
-          </div>
+          <div className="rounded-xl border border-accent-line bg-accent-soft px-4 py-3 text-sm text-primary">{error}</div>
         )}
 
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-sky-600 disabled:opacity-60"
+          className="inline-flex h-12 items-center gap-2 rounded-xl bg-primary px-6 text-sm font-bold text-primary-foreground shadow-soft transition-transform hover:scale-[1.01] disabled:opacity-60"
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {submitting ? 'Analyzing...' : 'Generate Storyboard'}
+          {submitting ? 'Analyzing…' : 'Generate Storyboard'}
         </button>
       </form>
     </div>

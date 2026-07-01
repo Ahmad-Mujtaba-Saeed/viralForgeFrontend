@@ -4,79 +4,119 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.99 0.002 240);
-  --foreground: oklch(0.15 0.01 240);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.01 240);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.01 240);
-  --primary: oklch(0.65 0.24 30);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.96 0.005 240);
-  --secondary-foreground: oklch(0.2 0.01 240);
-  --muted: oklch(0.95 0.005 240);
-  --muted-foreground: oklch(0.45 0.02 240);
-  --accent: oklch(0.65 0.24 30);
-  --accent-foreground: oklch(1 0 0);
+  /* Warm editorial light palette (mockup) */
+  --background: #FBFAF8;
+  --foreground: #1A1916;
+  --card: #FFFFFF;
+  --card-foreground: #1A1916;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A1916;
+  --primary: #E8492B;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F4F2EE;
+  --secondary-foreground: #1A1916;
+  --muted: #F7F5F1;
+  --muted-foreground: #6B6862;
+  --accent: #E8492B;
+  --accent-foreground: #FFFFFF;
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.005 240);
-  --input: oklch(0.91 0.005 240);
-  --ring: oklch(0.65 0.24 30);
-  --chart-1: oklch(0.65 0.24 30);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --destructive-foreground: #FFFFFF;
+  --border: #E9E6E0;
+  --input: #E9E6E0;
+  --ring: #E8492B;
+  --chart-1: #E8492B;
+  --chart-2: #3B6FE0;
+  --chart-3: #1F9E6B;
+  --chart-4: #F6A14A;
+  --chart-5: #8A57D8;
   --radius: 0.75rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.65 0.24 30);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.65 0.24 30);
+  --sidebar: #F4F2EE;
+  --sidebar-foreground: #1A1916;
+  --sidebar-primary: #E8492B;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #FFFFFF;
+  --sidebar-accent-foreground: #1A1916;
+  --sidebar-border: #E9E6E0;
+  --sidebar-ring: #E8492B;
+
+  /* Mockup helper tokens */
+  --rail: #F4F2EE;
+  --inset: #F7F5F1;
+  --ink3: #A09C94;
+  --line2: #F1EFEA;
+  --accent-soft: #FCEDE8;
+  --accent-line: #F2C3B6;
+  --good: #1F9E6B;
+  --good-soft: #E7F4EE;
+  --warn: #C98A1E;
+  --warn-soft: #FAF1DE;
+  --shadow: 0 1px 2px rgba(26,25,22,.04), 0 8px 24px rgba(26,25,22,.05);
+  --shadow-lg: 0 24px 64px rgba(26,25,22,.10);
 }
 
 .dark {
-  --background: oklch(0.12 0.015 260);
-  --foreground: oklch(0.95 0.005 240);
-  --card: oklch(0.16 0.015 260);
-  --card-foreground: oklch(0.95 0.005 240);
-  --popover: oklch(0.16 0.015 260);
-  --popover-foreground: oklch(0.95 0.005 240);
-  --primary: oklch(0.7 0.22 30);
-  --primary-foreground: oklch(0.12 0.015 260);
-  --secondary: oklch(0.22 0.015 260);
-  --secondary-foreground: oklch(0.95 0.005 240);
-  --muted: oklch(0.22 0.015 260);
-  --muted-foreground: oklch(0.65 0.01 240);
-  --accent: oklch(0.7 0.22 30);
-  --accent-foreground: oklch(0.12 0.015 260);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.28 0.015 260);
-  --input: oklch(0.28 0.015 260);
-  --ring: oklch(0.7 0.22 30);
-  --chart-1: oklch(0.7 0.22 30);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.16 0.015 260);
-  --sidebar-foreground: oklch(0.95 0.005 240);
-  --sidebar-primary: oklch(0.7 0.22 30);
-  --sidebar-primary-foreground: oklch(0.12 0.015 260);
-  --sidebar-accent: oklch(0.22 0.015 260);
-  --sidebar-accent-foreground: oklch(0.95 0.005 240);
-  --sidebar-border: oklch(0.28 0.015 260);
-  --sidebar-ring: oklch(0.7 0.22 30);
+  --background: #131210;
+  --foreground: #F2F0EB;
+  --card: #1C1B18;
+  --card-foreground: #F2F0EB;
+  --popover: #1C1B18;
+  --popover-foreground: #F2F0EB;
+  --primary: #FF5A38;
+  --primary-foreground: #16140F;
+  --secondary: #191815;
+  --secondary-foreground: #F2F0EB;
+  --muted: #201F1B;
+  --muted-foreground: #A6A29A;
+  --accent: #FF5A38;
+  --accent-foreground: #16140F;
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: #FFFFFF;
+  --border: #2C2A26;
+  --input: #2C2A26;
+  --ring: #FF5A38;
+  --chart-1: #FF5A38;
+  --chart-2: #5B86E5;
+  --chart-3: #3FB985;
+  --chart-4: #F6A14A;
+  --chart-5: #A57FE0;
+  --sidebar: #191815;
+  --sidebar-foreground: #F2F0EB;
+  --sidebar-primary: #FF5A38;
+  --sidebar-primary-foreground: #16140F;
+  --sidebar-accent: #1C1B18;
+  --sidebar-accent-foreground: #F2F0EB;
+  --sidebar-border: #2C2A26;
+  --sidebar-ring: #FF5A38;
+
+  /* Mockup helper tokens */
+  --rail: #191815;
+  --inset: #201F1B;
+  --ink3: #6E6A62;
+  --line2: #242320;
+  --accent-soft: #2A1812;
+  --accent-line: #4A2A1E;
+  --good: #3FB985;
+  --good-soft: #16291F;
+  --warn: #D8A33E;
+  --warn-soft: #2A2210;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  --shadow-lg: 0 24px 64px rgba(0,0,0,.55);
 }
 
 @theme inline {
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+  --color-rail: var(--rail);
+  --color-inset: var(--inset);
+  --color-ink3: var(--ink3);
+  --color-line2: var(--line2);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -174,5 +214,17 @@
 
   p {
     text-wrap: pretty;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display), var(--font-sans), sans-serif;
+  }
+  .shadow-soft {
+    box-shadow: var(--shadow);
+  }
+  .shadow-soft-lg {
+    box-shadow: var(--shadow-lg);
   }
 }

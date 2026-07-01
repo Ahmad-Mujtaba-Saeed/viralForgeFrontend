@@ -5,6 +5,11 @@ interface User {
   id: number
   name: string
   email: string
+  phone?: string
+  bio?: string
+  profile_img_url?: { url: string; path: string } | null
+  roles?: { id: number; slug: string; name: string }[]
+  is_admin?: boolean
   created_at: string
   updated_at: string
 }
@@ -90,6 +95,37 @@ export const getCurrentUser = createAsyncThunk(
   }
 )
 
+export const updateProfile = createAsyncThunk(
+  'auth/updateProfile',
+  async (data: { name?: string; phone?: string; bio?: string; email?: string }, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/api/user/profile-settings', data)
+      return response.data.user
+    } catch (error: any) {
+      const res = error.response?.data
+      const firstFieldError = res?.errors ? (Object.values(res.errors)[0] as string[])?.[0] : undefined
+      return rejectWithValue(firstFieldError || res?.message || 'Failed to update profile')
+    }
+  }
+)
+
+export const changePassword = createAsyncThunk(
+  'auth/changePassword',
+  async (
+    data: { current_password: string; password: string; password_confirmation: string },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await api.post('/api/user/change-password', data)
+      return response.data
+    } catch (error: any) {
+      const res = error.response?.data
+      const firstFieldError = res?.errors ? (Object.values(res.errors)[0] as string[])?.[0] : undefined
+      return rejectWithValue(firstFieldError || res?.message || 'Failed to change password')
+    }
+  }
+)
+
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -167,6 +203,12 @@ const authSlice = createSlice({
         state.token = null
         state.isAuthenticated = false
         state.error = action.payload as string
+      })
+
+    // Update profile — keep the cached user in sync on success.
+    builder
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.user = action.payload
       })
 
     // Get current user

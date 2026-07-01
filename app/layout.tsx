@@ -1,15 +1,21 @@
 import type { Metadata } from 'next'
-import { Sora, JetBrains_Mono } from 'next/font/google'
+import { Hanken_Grotesk, Bricolage_Grotesque, JetBrains_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ReduxProvider } from '@/components/providers/ReduxProvider'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 import './globals.css'
 
-const sora = Sora({ 
+const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
   variable: "--font-sans",
-  weight: ['300', '400', '500', '600', '700', '800'],
+  weight: ['400', '500', '600', '700'],
+})
+
+const bricolageGrotesque = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ['500', '600', '700'],
 })
 
 const jetbrainsMono = JetBrains_Mono({
@@ -46,7 +52,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-        <html lang="en" className={`${sora.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+        <html lang="en" className={`${hankenGrotesk.variable} ${bricolageGrotesque.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className="font-sans antialiased bg-background">
         <ReduxProvider>
           <AuthProvider>

@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import api from '@/lib/axios'
+import { useBilling } from '@/hooks/useBilling'
 import {
   Loader2, Upload, X, Film, RefreshCw, Play, AlertTriangle,
   Image as ImageIcon, LayoutGrid, Columns2, Square, Shuffle, Move,
@@ -69,12 +70,24 @@ const TEMPLATE_ICON: Record<string, React.ReactNode> = {
   full_bleed_with_banner: <PanelTop className="h-4 w-4" />,
 }
 
+const toggleBtn =
+  'inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-soft transition-colors hover:bg-inset'
+
 export default function StoryboardPage() {
   const { id } = useParams<{ id: string }>()
+  const router = useRouter()
+  const { credits, hasSubscription, costFor, fetchBilling } = useBilling()
   const [board, setBoard] = useState<Storyboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [rendering, setRendering] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const explainerCost = costFor('ai_explainer_video')
+  const canAffordRender = hasSubscription && credits >= explainerCost
+
+  useEffect(() => {
+    fetchBilling().catch(() => {})
+  }, [fetchBilling])
 
   const fetchBoard = useCallback(async () => {
     try {
@@ -110,11 +123,21 @@ export default function StoryboardPage() {
   }, [board, fetchBoard])
 
   const handleRender = async () => {
+    // Credit gate (server enforces this too).
+    if (!canAffordRender) {
+      router.push('/dashboard/billing')
+      return
+    }
     setRendering(true)
     try {
       await api.post(`/api/explainer/projects/${id}/render`)
       await fetchBoard()
+      fetchBilling().catch(() => {})
     } catch (err: any) {
+      if (err.response?.status === 402) {
+        router.push('/dashboard/billing')
+        return
+      }
       alert(err.response?.data?.message || 'Failed to start render')
     } finally {
       setRendering(false)
@@ -161,7 +184,7 @@ export default function StoryboardPage() {
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center text-muted-foreground">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading storyboard...
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading storyboard…
       </div>
     )
   }
@@ -171,57 +194,46 @@ export default function StoryboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-5xl">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">{board.title}</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="font-display text-[26px] font-semibold tracking-tight text-foreground">{board.title}</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {board.scenes.length} scenes · {board.aspect_ratio} · status:{' '}
-            <span className="font-medium text-foreground">{board.status}</span>
+            <span className="font-semibold capitalize text-foreground">{board.status}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleToggleNarration}
-            className="inline-flex items-center gap-2 rounded-lg border border-input px-4 py-2 text-sm hover:bg-muted"
-            title="AI voiceover (fal Chatterbox)"
-          >
-            {(board.narration_enabled ?? true) ? <Volume2 className="h-4 w-4 text-sky-400" /> : <VolumeX className="h-4 w-4" />}
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={handleToggleNarration} className={toggleBtn} title="AI voiceover">
+            {(board.narration_enabled ?? true) ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-ink3" />}
             Voiceover {(board.narration_enabled ?? true) ? 'On' : 'Off'}
           </button>
-          <button
-            onClick={handleToggleMusic}
-            className="inline-flex items-center gap-2 rounded-lg border border-input px-4 py-2 text-sm hover:bg-muted"
-            title="Curated background music (by scene mood)"
-          >
-            {(board.music_enabled ?? true) ? <Music className="h-4 w-4 text-sky-400" /> : <Music2 className="h-4 w-4 text-muted-foreground" />}
+          <button onClick={handleToggleMusic} className={toggleBtn} title="Curated background music (by scene mood)">
+            {(board.music_enabled ?? true) ? <Music className="h-4 w-4 text-primary" /> : <Music2 className="h-4 w-4 text-ink3" />}
             Music {(board.music_enabled ?? true) ? 'On' : 'Off'}
           </button>
-          <button
-            onClick={handleReanalyze}
-            className="inline-flex items-center gap-2 rounded-lg border border-input px-4 py-2 text-sm hover:bg-muted"
-          >
+          <button onClick={handleReanalyze} className={toggleBtn}>
             <RefreshCw className="h-4 w-4" /> Re-analyze
           </button>
         </div>
       </header>
 
       {board.theme && (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-input bg-card p-3">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               {[board.theme.bg_to, board.theme.accent, board.theme.accent2, board.theme.text].map((c, i) => (
-                <span key={i} className="h-6 w-6 rounded-full border border-white/10" style={{ background: c }} />
+                <span key={i} className="h-6 w-6 rounded-full border border-border" style={{ background: c }} />
               ))}
             </div>
             <div className="text-sm">
               <span className="text-muted-foreground">Color scheme: </span>
-              <span className="font-semibold">{board.theme.label}</span>
+              <span className="font-semibold text-foreground">{board.theme.label}</span>
             </div>
           </div>
           <button
             onClick={handleShuffleTheme}
-            className="inline-flex items-center gap-2 rounded-lg border border-input px-3 py-1.5 text-sm hover:bg-muted"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-inset"
           >
             <Shuffle className="h-4 w-4" /> Shuffle colors
           </button>
@@ -231,14 +243,14 @@ export default function StoryboardPage() {
       <StatusBanner board={board} />
 
       {board.status === 'completed' && board.output_url && (
-        <div className="mb-8 overflow-hidden rounded-xl border border-input bg-black">
+        <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-black shadow-soft">
           <video src={board.output_url} controls className="w-full" />
-          <div className="flex items-center justify-between p-3">
-            <span className="text-sm text-muted-foreground">Final render</span>
+          <div className="flex items-center justify-between bg-card p-3.5">
+            <span className="text-sm font-medium text-muted-foreground">Final render</span>
             <a
               href={board.output_url}
               download
-              className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
             >
               <Play className="h-4 w-4" /> Download MP4
             </a>
@@ -247,9 +259,9 @@ export default function StoryboardPage() {
       )}
 
       {board.status === 'analyzing' ? (
-        <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-input text-muted-foreground">
-          <Loader2 className="mb-3 h-6 w-6 animate-spin" />
-          Breaking your script into scenes...
+        <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground">
+          <Loader2 className="mb-3 h-6 w-6 animate-spin text-primary" />
+          Breaking your script into scenes…
         </div>
       ) : (
         <div className="space-y-5">
@@ -267,25 +279,31 @@ export default function StoryboardPage() {
       )}
 
       {board.scenes.length > 0 && board.status !== 'analyzing' && (
-        <div className="sticky bottom-4 mt-8 flex items-center justify-between gap-4 rounded-xl border border-input bg-background/95 p-4 shadow-lg backdrop-blur">
-          <div className="text-sm">
-            {board.ready_to_render ? (
-              <span className="text-emerald-500">All assets uploaded — ready to render.</span>
-            ) : (
-              <span className="text-amber-500">
-                {board.missing_slots.length} image slot(s) still need an upload.
+        <div className="sticky bottom-4 mt-8 flex items-center justify-between gap-4 rounded-2xl border border-border bg-card/95 p-4 shadow-soft-lg backdrop-blur">
+          <div className="text-sm font-medium">
+            {!canAffordRender ? (
+              <span className="text-warn">
+                {hasSubscription
+                  ? `Needs ${explainerCost} credits — you have ${credits}.`
+                  : 'Subscribe to render this video.'}
               </span>
+            ) : board.ready_to_render ? (
+              <span className="text-good">Ready to render — uses {explainerCost} credits.</span>
+            ) : (
+              <span className="text-warn">{board.missing_slots.length} image slot(s) still need an upload.</span>
             )}
           </div>
           <button
             onClick={handleRender}
-            disabled={!board.ready_to_render || rendering || board.status === 'processing'}
-            className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
+            disabled={!board.ready_to_render || rendering || board.status === 'processing' || !canAffordRender}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground shadow-soft disabled:opacity-50"
           >
             {board.status === 'processing' ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Rendering {board.progress}%</>
+            ) : !canAffordRender ? (
+              <><Film className="h-4 w-4" /> {hasSubscription ? 'Get credits' : 'View plans'}</>
             ) : (
-              <><Film className="h-4 w-4" /> Approve & Render</>
+              <><Film className="h-4 w-4" /> Approve &amp; Render</>
             )}
           </button>
         </div>
@@ -297,7 +315,7 @@ export default function StoryboardPage() {
 function StatusBanner({ board }: { board: Storyboard }) {
   if (board.status === 'failed' && board.error_message) {
     return (
-      <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+      <div className="mb-6 flex items-start gap-3 rounded-xl border border-accent-line bg-accent-soft px-4 py-3 text-sm text-primary">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <span>{board.error_message}</span>
       </div>
@@ -305,8 +323,8 @@ function StatusBanner({ board }: { board: Storyboard }) {
   }
   if (board.status === 'processing') {
     return (
-      <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div className="h-full bg-sky-500 transition-all" style={{ width: `${board.progress}%` }} />
+      <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-inset">
+        <div className="h-full bg-primary transition-all" style={{ width: `${board.progress}%` }} />
       </div>
     )
   }
@@ -335,24 +353,24 @@ function SceneCard({
   }
 
   return (
-    <div className="rounded-xl border border-input bg-card p-4">
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/15 text-xs font-bold text-sky-400">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-primary">
             {scene.order}
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-inset px-2 py-1 text-xs font-semibold text-foreground">
             {TEMPLATE_ICON[scene.layout_template] || <LayoutGrid className="h-4 w-4" />}
             {templateLabel}
           </span>
-          <span className="text-xs text-muted-foreground">{scene.duration_seconds}s</span>
+          <span className="font-mono text-xs text-ink3">{scene.duration_seconds}s</span>
         </div>
         <label className="flex items-center gap-1 text-xs text-muted-foreground">
           <Film className="h-3 w-3" /> transition
           <select
             value={scene.transition}
             onChange={(e) => updateTransition(e.target.value)}
-            className="rounded border border-input bg-background px-1.5 py-0.5 text-[11px] outline-none focus:ring-1 focus:ring-sky-500"
+            className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-foreground outline-none focus:border-primary"
           >
             {(board.transitions || []).map((t) => (
               <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
@@ -433,17 +451,17 @@ function SlotCard({
   }
 
   const dockBadge = slot.dock ? (
-    <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{slot.dock}</span>
+    <span className="ml-1 rounded bg-inset px-1.5 py-0.5 text-[10px] text-ink3">{slot.dock}</span>
   ) : null
 
   if (slot.content_type === 'text_block') {
     return (
-      <div className="rounded-lg border border-input bg-muted/40 p-3">
-        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{slotKey}{dockBadge}</div>
-        {slot.heading && <div className="font-semibold text-sky-400">{slot.heading}</div>}
-        <ul className="mt-1 space-y-0.5 text-sm">
+      <div className="rounded-xl border border-border bg-inset p-3">
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink3">{slotKey}{dockBadge}</div>
+        {slot.heading && <div className="font-semibold text-primary">{slot.heading}</div>}
+        <ul className="mt-1 space-y-0.5 text-sm text-foreground">
           {(slot.bullets || []).map((b, i) => (
-            <li key={i} className="flex gap-1.5"><span className="text-sky-400">›</span>{b}</li>
+            <li key={i} className="flex gap-1.5"><span className="text-primary">›</span>{b}</li>
           ))}
         </ul>
       </div>
@@ -452,12 +470,12 @@ function SlotCard({
 
   if (slot.content_type === 'explanation_box') {
     return (
-      <div className="rounded-lg border border-input bg-muted/40 p-3">
+      <div className="rounded-xl border border-border bg-inset p-3">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{slotKey}{dockBadge}</span>
-          <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink3">{slotKey}{dockBadge}</span>
+          <MessageSquare className="h-3.5 w-3.5 text-ink3" />
         </div>
-        {slot.heading && <div className="font-semibold text-sky-400">{slot.heading}</div>}
+        {slot.heading && <div className="font-semibold text-primary">{slot.heading}</div>}
         {slot.body && <p className="mt-1 text-sm text-muted-foreground">{slot.body}</p>}
       </div>
     )
@@ -465,9 +483,9 @@ function SlotCard({
 
   // image / video slot
   return (
-    <div className="rounded-lg border border-input bg-muted/40 p-3">
+    <div className="rounded-xl border border-border bg-inset p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="text-xs font-semibold uppercase tracking-wide text-ink3">
           {slotKey} {slot.label ? `· ${slot.label}` : ''}
         </div>
         <div className="flex items-center gap-1 text-muted-foreground">
@@ -475,7 +493,7 @@ function SlotCard({
           <select
             value={slot.camera_move || ''}
             onChange={(e) => updateCameraMove(e.target.value)}
-            className="rounded border border-input bg-background px-1.5 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-sky-500"
+            className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] text-foreground outline-none focus:border-primary"
             title="Camera movement"
           >
             {cameraMoves.map((m) => (
@@ -486,10 +504,11 @@ function SlotCard({
       </div>
 
       {slot.asset?.url ? (
-        <div className="relative overflow-hidden rounded-md">
+        <div className="relative overflow-hidden rounded-lg">
           {slot.asset.type === 'video' ? (
             <video src={slot.asset.url} className="h-32 w-full object-cover" muted />
           ) : (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={slot.asset.url} alt="" className="h-32 w-full object-cover" />
           )}
           <button
@@ -503,7 +522,7 @@ function SlotCard({
         <button
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-input text-center text-xs text-muted-foreground hover:border-sky-500 hover:text-sky-400"
+          className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center text-xs text-ink3 transition-colors hover:border-primary hover:text-primary"
         >
           {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
           <span className="px-2">{slot.asset_request?.description || 'Upload media'}</span>
@@ -523,7 +542,7 @@ function SlotCard({
       />
 
       {!slot.asset?.url && slot.asset_request?.description && (
-        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-ink3">
           <ImageIcon className="mt-0.5 h-3 w-3 shrink-0" />
           {slot.asset_request.description}
         </p>

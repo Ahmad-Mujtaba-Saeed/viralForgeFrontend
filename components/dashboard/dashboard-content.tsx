@@ -1,452 +1,286 @@
 "use client"
 
+import { useEffect, useMemo } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
-  Video,
-  Eye,
-  ThumbsUp,
-  TrendingUp,
-  Play,
-  Clock,
-  MoreHorizontal,
   Plus,
   Sparkles,
-  Upload,
-  Scissors,
-  Calendar,
-  ArrowUpRight,
-  ArrowDownRight,
-  Zap,
-  Target,
-  Users,
-  Share2,
+  Film,
+  Link2,
+  ChevronRight,
+  Play,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
+import { useProject } from "@/hooks/useProject"
+import type { Project } from "@/store/projectSlice"
 
-const stats = [
+const quickStarts = [
   {
-    title: "Total Videos",
-    value: "124",
-    change: "+12",
-    changeLabel: "vs last month",
-    trend: "up",
-    icon: Video,
+    title: "Faceless short",
+    sub: "Story · 9:16",
+    href: "/dashboard/templates",
+    icon: Film,
+    color: "#E8492B",
   },
   {
-    title: "Total Views",
-    value: "1.2M",
-    change: "+23%",
-    changeLabel: "vs last month",
-    trend: "up",
-    icon: Eye,
+    title: "AI Explainer",
+    sub: "Script → video",
+    href: "/dashboard/explainer",
+    icon: Sparkles,
+    color: "#8A57D8",
   },
   {
-    title: "Engagement Rate",
-    value: "8.4%",
-    change: "+2.1%",
-    changeLabel: "vs last month",
-    trend: "up",
-    icon: ThumbsUp,
-  },
-  {
-    title: "New Subscribers",
-    value: "2,340",
-    change: "-5%",
-    changeLabel: "vs last month",
-    trend: "down",
-    icon: Users,
+    title: "From a link",
+    sub: "Repurpose a video",
+    href: "/dashboard/templates",
+    icon: Link2,
+    color: "#3B6FE0",
   },
 ]
 
-const quickActions = [
-  { icon: Plus, label: "New Video", color: "bg-primary text-primary-foreground" },
-  { icon: Sparkles, label: "AI Generate", color: "bg-gradient-to-br from-violet-500 to-purple-600 text-white" },
-  { icon: Upload, label: "Upload", color: "bg-blue-500 text-white" },
-  { icon: Scissors, label: "Quick Edit", color: "bg-emerald-500 text-white" },
-]
-
-const recentVideos = [
-  {
-    title: "10 Tips for Better Content",
-    views: "24.5K",
-    duration: "12:34",
-    status: "Published",
-    engagement: 12.4,
-    thumbnail: "bg-gradient-to-br from-primary/30 to-primary/10",
-  },
-  {
-    title: "How I Grew to 100K",
-    views: "18.2K",
-    duration: "15:22",
-    status: "Published",
-    engagement: 9.8,
-    thumbnail: "bg-gradient-to-br from-blue-500/30 to-blue-500/10",
-  },
-  {
-    title: "Morning Routine 2024",
-    views: "12.1K",
-    duration: "8:45",
-    status: "Processing",
-    engagement: 0,
-    thumbnail: "bg-gradient-to-br from-green-500/30 to-green-500/10",
-  },
-  {
-    title: "Studio Tour Update",
-    views: "-",
-    duration: "20:15",
-    status: "Draft",
-    engagement: 0,
-    thumbnail: "bg-gradient-to-br from-amber-500/30 to-amber-500/10",
-  },
-]
-
-const scheduledContent = [
-  { title: "Product Review: New Camera", date: "Tomorrow, 3:00 PM", platform: "YouTube" },
-  { title: "Quick Tips #45", date: "Apr 26, 10:00 AM", platform: "TikTok" },
-  { title: "Behind the Scenes", date: "Apr 27, 2:00 PM", platform: "Instagram" },
-]
-
-const topPerforming = [
-  { title: "Viral Hook Tutorial", views: "156K", growth: "+340%" },
-  { title: "Day in My Life", views: "98K", growth: "+180%" },
-  { title: "Studio Setup Guide", views: "72K", growth: "+95%" },
-]
-
-const weeklyData = [
-  { day: "Mon", value: 65 },
-  { day: "Tue", value: 85 },
-  { day: "Wed", value: 45 },
-  { day: "Thu", value: 90 },
-  { day: "Fri", value: 120 },
-  { day: "Sat", value: 75 },
-  { day: "Sun", value: 95 },
-]
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
+const statusBadge = (status?: string): { label: string; cls: string } => {
+  switch (status) {
+    case "completed":
+      return { label: "Done", cls: "bg-good-soft text-good" }
+    case "processing":
+      return { label: "Rendering", cls: "bg-warn-soft text-warn" }
+    case "failed":
+      return { label: "Failed", cls: "bg-accent-soft text-primary" }
+    default:
+      return { label: "Draft", cls: "bg-inset text-muted-foreground" }
+  }
 }
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+const gradientFor = (seed: number) => {
+  const palette = [
+    "linear-gradient(160deg,#2A1E3A,#15131C)",
+    "linear-gradient(160deg,#11324A,#0C1A26)",
+    "linear-gradient(160deg,#16302A,#0C1A17)",
+    "linear-gradient(160deg,#2E2410,#171206)",
+    "linear-gradient(160deg,#3A1320,#1C0C12)",
+    "linear-gradient(160deg,#1A1430,#0E0B1A)",
+  ]
+  return palette[seed % palette.length]
 }
+
+const timeAgo = (iso?: string | null) => {
+  if (!iso) return ""
+  const d = new Date(iso).getTime()
+  if (Number.isNaN(d)) return ""
+  const diff = Date.now() - d
+  const m = Math.round(diff / 60000)
+  if (m < 1) return "just now"
+  if (m < 60) return `${m}m ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h}h ago`
+  const days = Math.round(h / 24)
+  return `${days}d ago`
+}
+
+const prettyTemplate = (t?: string) =>
+  (t || "Project").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 
 export function DashboardContent() {
-  const maxValue = Math.max(...weeklyData.map((d) => d.value))
+  const router = useRouter()
+  const { projects, isFetchingProjects, fetchProjects } = useProject() as {
+    projects: Project[]
+    isFetchingProjects?: boolean
+    fetchProjects: () => Promise<unknown>
+  }
+
+  useEffect(() => {
+    fetchProjects().catch(() => {})
+  }, [fetchProjects])
+
+  const sorted = useMemo(
+    () =>
+      [...(projects ?? [])].sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : a.id
+        const tb = b.created_at ? new Date(b.created_at).getTime() : b.id
+        return tb - ta
+      }),
+    [projects]
+  )
+
+  const rendering = sorted.find((p) => p.status === "processing")
+  const recent = sorted.filter((p) => p.id !== rendering?.id).slice(0, 8)
+  const draftCount = sorted.filter(
+    (p) => !["processing", "completed"].includes(p.status)
+  ).length
+
+  const open = (id: number) => router.push(`/dashboard/create?projectId=${id}`)
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header with Quick Actions */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <h1 className="text-2xl font-bold text-foreground">Welcome back, John</h1>
-          <p className="text-muted-foreground mt-1">
-            Here&apos;s what&apos;s happening with your content today.
+    <div className="space-y-8">
+      {/* Heading + CTA */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-display text-[30px] font-semibold leading-tight tracking-tight text-foreground">
+            Welcome back
+          </h1>
+          <p className="mt-1 text-[15px] text-muted-foreground">
+            {rendering ? (
+              <>
+                You have <b className="text-foreground">1 render in progress</b>
+                {draftCount > 0 ? <> and {draftCount} drafts waiting.</> : "."}
+              </>
+            ) : (
+              <>You have {sorted.length} project{sorted.length === 1 ? "" : "s"}.</>
+            )}
           </p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="flex flex-wrap gap-2"
+        </div>
+        <Link
+          href="/dashboard/templates"
+          className="inline-flex h-10 items-center gap-2 self-start rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground shadow-soft transition-transform hover:scale-[1.02] sm:self-auto"
         >
-          {quickActions.map((action, index) => (
-            <Button
-              key={index}
-              className={`${action.color} gap-2 shadow-sm hover:shadow-md transition-shadow`}
-              size="sm"
+          <Plus className="h-4 w-4" />
+          New video
+        </Link>
+      </div>
+
+      {/* Quick starts */}
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+        {quickStarts.map((q) => (
+          <Link
+            key={q.title}
+            href={q.href}
+            className="group flex items-center gap-3.5 rounded-2xl border border-border bg-card p-4 shadow-soft transition-transform hover:-translate-y-0.5"
+          >
+            <span
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-white"
+              style={{ background: q.color }}
             >
-              <action.icon className="h-4 w-4" />
-              {action.label}
-            </Button>
-          ))}
-        </motion.div>
-      </div>
-
-      {/* Stats Grid */}
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-      >
-        {stats.map((stat, index) => (
-          <motion.div key={index} variants={itemVariants}>
-            <Card className="bg-card border-border hover:shadow-md transition-shadow">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                    <p className="text-2xl font-bold text-foreground mt-1">{stat.value}</p>
-                    <div className="flex items-center gap-1 mt-2">
-                      {stat.trend === "up" ? (
-                        <ArrowUpRight className="h-4 w-4 text-emerald-500" />
-                      ) : (
-                        <ArrowDownRight className="h-4 w-4 text-red-500" />
-                      )}
-                      <span
-                        className={`text-sm font-medium ${
-                          stat.trend === "up" ? "text-emerald-500" : "text-red-500"
-                        }`}
-                      >
-                        {stat.change}
-                      </span>
-                      <span className="text-xs text-muted-foreground">{stat.changeLabel}</span>
-                    </div>
-                  </div>
-                  <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <stat.icon className="h-5 w-5 text-primary" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+              <q.icon className="h-[19px] w-[19px]" />
+            </span>
+            <span className="flex flex-col">
+              <span className="text-[14.5px] font-semibold text-foreground">{q.title}</span>
+              <span className="text-[12.5px] text-ink3">{q.sub}</span>
+            </span>
+            <ChevronRight className="ml-auto h-4 w-4 text-ink3 transition-transform group-hover:translate-x-0.5" />
+          </Link>
         ))}
-      </motion.div>
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Views Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="lg:col-span-2"
-        >
-          <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base font-semibold text-foreground">
-                Weekly Views Overview
-              </CardTitle>
-              <Button variant="ghost" size="sm" className="text-muted-foreground text-xs">
-                View Report
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end justify-between gap-2 h-40 mt-4">
-                {weeklyData.map((item, index) => (
-                  <div key={index} className="flex flex-col items-center gap-2 flex-1">
-                    <motion.div
-                      initial={{ height: 0 }}
-                      animate={{ height: `${(item.value / maxValue) * 100}%` }}
-                      transition={{ duration: 0.5, delay: 0.4 + index * 0.1 }}
-                      className="w-full max-w-[40px] bg-primary/20 rounded-t-md relative group cursor-pointer hover:bg-primary/30 transition-colors"
-                    >
-                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-foreground text-background text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                        {item.value}K views
-                      </div>
-                      <div
-                        className="absolute bottom-0 left-0 right-0 bg-primary rounded-t-md transition-all"
-                        style={{ height: "60%" }}
-                      />
-                    </motion.div>
-                    <span className="text-xs text-muted-foreground">{item.day}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Scheduled Content */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-        >
-          <Card className="bg-card border-border h-full">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-primary" />
-                Scheduled
-              </CardTitle>
-              <Button variant="ghost" size="sm" className="text-primary text-xs">
-                View All
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {scheduledContent.map((item, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5 + index * 0.1 }}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                >
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Clock className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.date} • {item.platform}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
-            </CardContent>
-          </Card>
-        </motion.div>
       </div>
 
-      {/* Bottom Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Videos */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.5 }}
-          className="lg:col-span-2"
-        >
-          <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base font-semibold text-foreground">
-                Recent Videos
-              </CardTitle>
-              <Button variant="ghost" size="sm" className="text-primary text-xs">
-                View All
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {recentVideos.map((video, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, delay: 0.6 + index * 0.1 }}
-                    className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+      {/* Rendering now */}
+      {rendering && (
+        <section>
+          <h2 className="mb-3.5 text-base font-semibold tracking-tight text-foreground">
+            Rendering now
+          </h2>
+          <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft sm:gap-5 sm:p-5">
+            <div
+              className="relative h-[74px] w-[54px] flex-shrink-0 overflow-hidden rounded-lg"
+              style={{ background: gradientFor(rendering.id) }}
+            >
+              <div className="absolute inset-0 bg-[repeating-linear-gradient(125deg,rgba(255,255,255,.05),rgba(255,255,255,.05)_6px,transparent_6px,transparent_13px)]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2.5">
+                <span className="truncate text-[14.5px] font-semibold text-foreground">
+                  {rendering.title || "Untitled Project"}
+                </span>
+                <span className="flex-shrink-0 rounded-md bg-warn-soft px-2 py-0.5 text-[11px] font-bold text-warn">
+                  Rendering
+                </span>
+              </div>
+              <div className="mt-1 text-[12.5px] text-ink3">
+                {prettyTemplate(rendering.template_type)} · started {timeAgo(rendering.created_at) || "recently"}
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-inset">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${Math.min(rendering.progress ?? 0, 100)}%` }}
+                  />
+                </div>
+                <span className="font-mono text-xs font-medium text-muted-foreground">
+                  {Math.min(rendering.progress ?? 0, 100)}%
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => open(rendering.id)}
+              className="h-9 flex-shrink-0 rounded-lg border border-border bg-card px-4 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              View
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Recent projects */}
+      <section>
+        <div className="mb-3.5 flex items-center justify-between">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Recent projects</h2>
+          <Link
+            href="/dashboard/projects"
+            className="text-[13px] font-semibold text-primary hover:underline"
+          >
+            View all
+          </Link>
+        </div>
+
+        {isFetchingProjects && recent.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+            Loading projects…
+          </div>
+        ) : recent.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card p-10 text-center">
+            <p className="text-sm text-muted-foreground">No projects yet.</p>
+            <Link
+              href="/dashboard/templates"
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground"
+            >
+              <Plus className="h-4 w-4" /> Create your first video
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {recent.map((p) => {
+              const badge = statusBadge(p.status)
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => open(p.id)}
+                  className="group text-left"
+                >
+                  <div
+                    className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl"
+                    style={{ background: gradientFor(p.id) }}
                   >
-                    <div
-                      className={`w-20 h-12 rounded-lg ${video.thumbnail} flex items-center justify-center shrink-0`}
-                    >
-                      <Play className="h-5 w-5 text-foreground/50 group-hover:text-foreground group-hover:scale-110 transition-all" />
+                    {p.thumbnail_path ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={p.thumbnail_path}
+                        alt={p.title || "thumbnail"}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-[repeating-linear-gradient(125deg,rgba(255,255,255,.04),rgba(255,255,255,.04)_7px,transparent_7px,transparent_15px)]" />
+                    )}
+                    <span className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/15 opacity-0 backdrop-blur transition-opacity group-hover:opacity-100">
+                      <Play className="ml-0.5 h-4 w-4 fill-white text-white" />
+                    </span>
+                    <span className={`absolute right-2 top-2 rounded-md px-2 py-0.5 text-[10.5px] font-bold ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                  <div className="px-0.5 pt-2.5">
+                    <div className="truncate text-[13.5px] font-semibold text-foreground">
+                      {p.title || "Untitled Project"}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-foreground text-sm truncate">
-                        {video.title}
-                      </h4>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Eye className="h-3 w-3" />
-                          {video.views}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {video.duration}
-                        </span>
-                        {video.engagement > 0 && (
-                          <span className="flex items-center gap-1 text-emerald-500">
-                            <TrendingUp className="h-3 w-3" />
-                            {video.engagement}%
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                          video.status === "Published"
-                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : video.status === "Processing"
-                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {video.status}
-                      </span>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Top Performing & Goals */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
-          className="space-y-6"
-        >
-          {/* Top Performing */}
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Zap className="h-4 w-4 text-amber-500" />
-                Top Performing
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {topPerforming.map((item, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-primary">#{index + 1}</span>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">{item.views} views</p>
+                    <div className="mt-0.5 text-[12px] text-ink3">
+                      {prettyTemplate(p.template_type)}
+                      {p.created_at ? ` · ${timeAgo(p.created_at)}` : ""}
                     </div>
                   </div>
-                  <span className="text-xs font-medium text-emerald-500">{item.growth}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Monthly Goal */}
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Target className="h-4 w-4 text-primary" />
-                Monthly Goal
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Videos Created</span>
-                    <span className="text-sm font-medium text-foreground">12/15</span>
-                  </div>
-                  <Progress value={80} className="h-2" />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Views Target</span>
-                    <span className="text-sm font-medium text-foreground">850K/1M</span>
-                  </div>
-                  <Progress value={85} className="h-2" />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">New Followers</span>
-                    <span className="text-sm font-medium text-foreground">2.3K/5K</span>
-                  </div>
-                  <Progress value={46} className="h-2" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

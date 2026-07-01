@@ -1,30 +1,24 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Search, Grid3x3, List, MoreVertical, Play, Download, Trash2, Share2, Eye } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Search, LayoutGrid, List, MoreVertical, Play, Download, Share2, Trash2, Plus } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { cn } from '@/lib/utils'
 import { useProject } from '@/hooks/useProject'
 
 interface VideoItem {
   id: number
   title: string
   thumbnail_path: string
-  thumbnailClass: string
   duration: string
   aspectRatio: string
   width: number
   height: number
-  views: number
-  likes: number
   date: string
   outputPath?: string | null
-  videoPath?: string | null
   status?: string | null
   templateType?: string | null
-  completedAt?: string | null
-  fileType?: string | null
-  fileSize?: number | null
   formattedFileSize?: string | null
 }
 
@@ -38,362 +32,289 @@ const TEMPLATE_ASPECT_RATIOS: Record<string, string> = {
   default: '16:9',
 }
 
-const TEMPLATE_THUMBNAIL_CLASSES: Record<string, string> = {
-  yt_automation_short: 'bg-gradient-to-br from-violet-500 to-fuchsia-500',
-  youtube_short: 'bg-gradient-to-br from-orange-500 to-rose-500',
-  tiktok: 'bg-gradient-to-br from-slate-900 to-slate-700',
-  instagram_story: 'bg-gradient-to-br from-pink-500 to-yellow-400',
-  yt_automation_long: 'bg-gradient-to-br from-sky-500 to-cyan-500',
-  youtube_long: 'bg-gradient-to-br from-blue-500 to-teal-500',
-  default: 'bg-gradient-to-br from-slate-600 to-slate-800',
-}
-
 const getAspectRatioFromTemplateType = (templateType?: string) => {
   if (!templateType) return TEMPLATE_ASPECT_RATIOS.default
   return TEMPLATE_ASPECT_RATIOS[templateType] || TEMPLATE_ASPECT_RATIOS.default
 }
 
-const getProjectThumbnailClass = (templateType?: string) => {
-  if (!templateType) return TEMPLATE_THUMBNAIL_CLASSES.default
-  return TEMPLATE_THUMBNAIL_CLASSES[templateType] || TEMPLATE_THUMBNAIL_CLASSES.default
+const gradientFor = (seed: number) => {
+  const palette = [
+    'linear-gradient(160deg,#2A1E3A,#15131C)',
+    'linear-gradient(160deg,#11324A,#0C1A26)',
+    'linear-gradient(160deg,#16302A,#0C1A17)',
+    'linear-gradient(160deg,#2E2410,#171206)',
+    'linear-gradient(160deg,#3A1320,#1C0C12)',
+    'linear-gradient(160deg,#1A1430,#0E0B1A)',
+  ]
+  return palette[seed % palette.length]
 }
 
 const formatProjectDate = (date?: string) => {
   if (!date) return 'Unknown date'
   const parsed = new Date(date)
-  return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+  return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 const buildVideoItemFromProject = (project: any): VideoItem => {
   const aspectRatio = getAspectRatioFromTemplateType(project.template_type)
   const [width, height] = aspectRatio.split(':').map(Number)
-
   return {
     id: project.id,
     title: project.title || project.file_name || `Project ${project.id}`,
     thumbnail_path: project.thumbnail_path,
-    thumbnailClass: getProjectThumbnailClass(project.template_type),
     duration: project.formatted_duration || '0:00',
     aspectRatio,
     width: project.width || width * 90,
     height: project.height || height * 90,
-    views: project.file_size || 0,
-    likes: 0,
     date: formatProjectDate(project.completed_at || project.created_at),
     outputPath: project.output_path || project.video_path,
-    videoPath: project.video_path,
     status: project.status,
     templateType: project.template_type,
-    completedAt: project.completed_at,
-    fileType: project.file_type,
-    fileSize: project.file_size,
     formattedFileSize: project.formatted_file_size,
   }
 }
 
 const getAspectRatioValue = (video: VideoItem) => {
-  if (video.width && video.height) {
-    return video.width / video.height
-  }
-
+  if (video.width && video.height) return video.width / video.height
   const [width, height] = video.aspectRatio.split(':').map(Number)
   return height > 0 ? width / height : 16 / 9
 }
 
 const isPortrait = (video: VideoItem) => getAspectRatioValue(video) < 1
+const getGridColsClass = (video: VideoItem) => (isPortrait(video) ? 'col-span-1' : 'col-span-1 lg:col-span-2')
+const getAspectRatioClass = (video: VideoItem) => (isPortrait(video) ? 'aspect-[9/16]' : 'aspect-video')
 
-const getGridColsClass = (video: VideoItem, isGridView: boolean) => {
-  if (!isGridView) return 'col-span-1'
-  return isPortrait(video) ? 'col-span-1' : 'col-span-1 lg:col-span-2'
-}
+const Thumb = ({ video, children }: { video: VideoItem; children?: React.ReactNode }) => (
+  <div
+    className={cn('relative overflow-hidden', getAspectRatioClass(video))}
+    style={
+      video.thumbnail_path
+        ? { backgroundImage: `url(${video.thumbnail_path})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+        : { background: gradientFor(video.id) }
+    }
+  >
+    {!video.thumbnail_path && (
+      <div className="absolute inset-0 bg-[repeating-linear-gradient(125deg,rgba(255,255,255,.04),rgba(255,255,255,.04)_7px,transparent_7px,transparent_15px)]" />
+    )}
+    {children}
+  </div>
+)
 
-const getAspectRatioClass = (video: VideoItem) => {
-  return isPortrait(video) ? 'aspect-[9/16]' : 'aspect-video'
-}
-
-export default function VideosPage() {
+function VideosPageContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  // The header search navigates here with ?q=… — seed the local box from it.
+  const queryParam = searchParams.get('q') ?? ''
   const { projects, isFetchingProjects, fetchProjectsError, fetchProjects } = useProject()
   const [isGridView, setIsGridView] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(queryParam)
 
   useEffect(() => {
     fetchProjects().catch(() => {})
   }, [fetchProjects])
 
+  // Keep the box in sync whenever the header sends a new query.
+  useEffect(() => {
+    setSearchQuery(queryParam)
+  }, [queryParam])
+
   const videos = useMemo(
-    () =>
-      projects
-        .filter((project) => project.output_path || project.status === 'completed')
-        .map(buildVideoItemFromProject),
+    () => projects.filter((p) => p.output_path || p.status === 'completed').map(buildVideoItemFromProject),
     [projects]
   )
 
-  const filteredVideos = useMemo(
-    () =>
-      videos.filter((video) =>
-        video.title.toLowerCase().includes(searchQuery.toLowerCase())
-      ),
-    [videos, searchQuery]
-  )
+  const filteredVideos = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return videos
+    return videos.filter(
+      (v) =>
+        v.title.toLowerCase().includes(q) ||
+        (v.templateType ?? '').toLowerCase().includes(q)
+    )
+  }, [videos, searchQuery])
+
+  const openVideo = (video: VideoItem) => {
+    if (video.outputPath) window.open(video.outputPath, '_blank')
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="mb-6 sm:mb-8"
-        >
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2">My Videos</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">Manage and organize all your created videos</p>
-        </motion.div>
-
-        {/* Controls Bar */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="mb-6 sm:mb-8 flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center"
-        >
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-[26px] font-semibold tracking-tight text-foreground">My Videos</h1>
+          <p className="mt-1 text-[15px] text-muted-foreground">Every finished render, ready to download and share.</p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-10 w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 shadow-soft sm:w-[260px]">
+            <Search className="h-4 w-4 text-ink3" />
             <input
-              type="text"
-              placeholder="Search videos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 rounded-lg border border-border bg-card/50 text-sm sm:text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              placeholder="Search videos"
+              className="flex-1 border-none bg-transparent text-[13.5px] text-foreground outline-none placeholder:text-ink3"
             />
           </div>
-
-          {/* View Toggle */}
-          <div className="flex gap-2">
-            <Button
-              variant={isGridView ? 'default' : 'outline'}
-              size="icon"
+          <div className="flex gap-1 rounded-xl border border-border bg-card p-1 shadow-soft">
+            <button
               onClick={() => setIsGridView(true)}
-              className="w-10 h-10"
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                isGridView ? 'bg-primary text-primary-foreground' : 'text-ink3 hover:text-foreground'
+              )}
             >
-              <Grid3x3 className="w-4 h-4" />
-            </Button>
-            <Button
-              variant={!isGridView ? 'default' : 'outline'}
-              size="icon"
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
               onClick={() => setIsGridView(false)}
-              className="w-10 h-10"
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                !isGridView ? 'bg-primary text-primary-foreground' : 'text-ink3 hover:text-foreground'
+              )}
             >
-              <List className="w-4 h-4" />
-            </Button>
+              <List className="h-4 w-4" />
+            </button>
           </div>
-        </motion.div>
-
-        {/* Videos Grid */}
-        {isFetchingProjects ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="rounded-3xl border border-border bg-card p-8 text-center text-sm text-muted-foreground"
-          >
-            Loading videos...
-          </motion.div>
-        ) : fetchProjectsError ? (
-          <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-sm text-red-800">
-            {fetchProjectsError}
-          </div>
-        ) : filteredVideos.length === 0 ? (
-          <div className="rounded-3xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-            No output videos found yet. Create a new project or refresh the page.
-          </div>
-        ) : isGridView ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 auto-rows-max"
-          >
-            {filteredVideos.map((video, index) => (
-              <motion.div
-                key={video.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
-                className={getGridColsClass(video, isGridView)}
-              >
-                <div className="group rounded-lg sm:rounded-xl overflow-hidden border border-border bg-card hover:border-primary/50 transition-all duration-300 cursor-pointer h-full flex flex-col">
-                  {/* Video Thumbnail */}
-                  <div
-                    className={`relative ${getAspectRatioClass(video)} overflow-hidden ${video.thumbnail_path ? '' : video.thumbnailClass}`}
-                    style={
-                      video.thumbnail_path
-                        ? {
-                            backgroundImage: `url(${video.thumbnail_path})`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                          }
-                        : undefined
-                    }
-                  >
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
-                      <motion.div
-                        whileHover={{ scale: 1.1 }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                      >
-                        <Play className="w-12 h-12 sm:w-16 sm:h-16 text-white fill-white" />
-                      </motion.div>
-                    </div>
-
-                    {/* Duration Badge */}
-                    <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 px-2 sm:px-2.5 py-1 bg-black/80 rounded-md text-xs sm:text-sm font-semibold text-white">
-                      {video.duration}
-                    </div>
-
-                    {/* Aspect Ratio Badge */}
-                    <div className="absolute top-2 right-2 sm:top-3 sm:right-3 px-2 sm:px-2.5 py-1 bg-primary/80 rounded-md text-xs font-semibold text-primary-foreground">
-                      {video.aspectRatio}
-                    </div>
-                  </div>
-
-                  {/* Video Info */}
-                  <div className="p-3 sm:p-4 flex-1 flex flex-col">
-                    <h3 className="text-sm sm:text-base font-semibold text-foreground line-clamp-2 mb-2">{video.title}</h3>
-                    
-                    {/* <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3 sm:mb-4">
-                      <Eye className="w-3 h-3" />
-                      <span>{(video.views / 1000).toFixed(0)}K views</span>
-                      <span className="text-primary font-semibold">{(video.likes / 1000).toFixed(1)}K</span>
-                    </div> */}
-
-                    <p className="text-xs text-muted-foreground mb-3 sm:mb-4">{video.date}</p>
-
-                    {/* Actions */}
-                    <div className="flex gap-2 mt-auto">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 h-8 sm:h-9 text-xs sm:text-sm gap-1 sm:gap-2"
-                        disabled={!video.outputPath}
-                        onClick={() => video.outputPath && window.open(video.outputPath, '_blank')}
-                      >
-                        <Download className="w-3 h-3 sm:w-4 sm:h-4" />
-                        <span className="hidden sm:inline">Download</span>
-                      </Button>
-                      <Button size="icon" variant="outline" className="h-8 sm:h-9 w-8 sm:w-9">
-                        <MoreVertical className="w-3 h-3 sm:w-4 sm:h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        ) : (
-          /* List View */
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="space-y-3 sm:space-y-4"
-          >
-            {filteredVideos.map((video, index) => (
-              <motion.div
-                key={video.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
-                className="group rounded-lg sm:rounded-xl border border-border bg-card/50 hover:border-primary/50 hover:bg-card transition-all duration-300 p-3 sm:p-4 flex gap-3 sm:gap-4"
-              >
-                {/* Thumbnail */}
-                <div
-                  className={`flex-shrink-0 ${getAspectRatioClass(video)} rounded-lg overflow-hidden relative w-24 sm:w-32 lg:w-40 ${video.thumbnail_path ? '' : video.thumbnailClass}`}
-                  style={
-                    video.thumbnail_path
-                      ? {
-                          backgroundImage: `url(${video.thumbnail_path})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }
-                      : undefined
-                  }
-                >
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
-                    <motion.div whileHover={{ scale: 1.1 }} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Play className="w-6 h-6 sm:w-8 sm:h-8 text-white fill-white" />
-                    </motion.div>
-                  </div>
-                  <div className="absolute bottom-1 sm:bottom-2 right-1 sm:right-2 px-2 py-0.5 bg-black/80 rounded text-xs font-semibold text-white">
-                    {video.duration}
-                  </div>
-                </div>
-
-                {/* Info */}
-                <div className="flex-1 flex flex-col justify-between min-w-0">
-                  <div>
-                    <h3 className="text-sm sm:text-base font-semibold text-foreground truncate">{video.title}</h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">{video.date}</p>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-4 text-xs text-muted-foreground">
-                    <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-semibold">{video.aspectRatio}</span>
-                    <span className="flex items-center gap-1">
-                      <Eye className="w-3 h-3" />
-                      {(video.views / 1000).toFixed(0)}K
-                    </span>
-                    <span className="text-primary font-semibold">{(video.likes / 1000).toFixed(1)}K likes</span>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex-shrink-0 flex flex-col sm:flex-row gap-1 sm:gap-2">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="w-8 h-8 sm:w-9 sm:h-9"
-                    title="Download"
-                    disabled={!video.outputPath}
-                    onClick={() => video.outputPath && window.open(video.outputPath, '_blank')}
-                  >
-                    <Download className="w-4 h-4" />
-                  </Button>
-                  <Button size="icon" variant="ghost" className="w-8 h-8 sm:w-9 sm:h-9" title="Share">
-                    <Share2 className="w-4 h-4" />
-                  </Button>
-                  <Button size="icon" variant="ghost" className="w-8 h-8 sm:w-9 sm:h-9 hover:text-destructive" title="Delete">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-
-        {/* Empty State */}
-        {filteredVideos.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="flex flex-col items-center justify-center py-12 sm:py-20"
-          >
-            <div className="text-center">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                <Play className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2">No videos found</h3>
-              <p className="text-sm text-muted-foreground mb-6">Try adjusting your search or create a new video</p>
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Create First Video
-              </Button>
-            </div>
-          </motion.div>
-        )}
+        </div>
       </div>
+
+      {/* States */}
+      {isFetchingProjects && filteredVideos.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
+          Loading videos…
+        </div>
+      ) : fetchProjectsError ? (
+        <div className="rounded-2xl border border-accent-line bg-accent-soft p-6 text-sm text-primary">
+          {fetchProjectsError}
+        </div>
+      ) : filteredVideos.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card py-16 text-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-inset">
+            <Play className="h-8 w-8 text-ink3" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground">No videos yet</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Finished renders will appear here.</p>
+          <button
+            onClick={() => router.push('/dashboard/templates')}
+            className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground"
+          >
+            <Plus className="h-4 w-4" /> Create a video
+          </button>
+        </div>
+      ) : isGridView ? (
+        <div className="grid auto-rows-max grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {filteredVideos.map((video, index) => (
+            <motion.div
+              key={video.id}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.04 }}
+              className={getGridColsClass(video)}
+            >
+              <div className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft transition-transform hover:-translate-y-0.5">
+                <button onClick={() => openVideo(video)} className="block w-full text-left">
+                  <Thumb video={video}>
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/40">
+                      <Play className="h-12 w-12 fill-white text-white opacity-0 transition-opacity group-hover:opacity-100" />
+                    </div>
+                    <span className="absolute bottom-2.5 right-2.5 rounded-md bg-black/60 px-2 py-0.5 font-mono text-[11px] font-semibold text-white backdrop-blur">
+                      {video.duration}
+                    </span>
+                    <span className="absolute right-2.5 top-2.5 rounded-md bg-black/40 px-2 py-0.5 text-[10.5px] font-bold text-white backdrop-blur">
+                      {video.aspectRatio}
+                    </span>
+                  </Thumb>
+                </button>
+
+                <div className="flex flex-1 flex-col p-4">
+                  <h3 className="line-clamp-2 text-[14.5px] font-semibold text-foreground">{video.title}</h3>
+                  <p className="mt-1 text-[12px] text-ink3">
+                    {video.date}
+                    {video.formattedFileSize ? ` · ${video.formattedFileSize}` : ''}
+                  </p>
+                  <div className="mt-auto flex gap-2 pt-3">
+                    <button
+                      disabled={!video.outputPath}
+                      onClick={() => openVideo(video)}
+                      className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground disabled:opacity-50"
+                    >
+                      <Download className="h-3.5 w-3.5" /> Download
+                    </button>
+                    <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground">
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredVideos.map((video, index) => (
+            <motion.div
+              key={video.id}
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.04 }}
+              className="group flex gap-4 rounded-2xl border border-border bg-card p-3.5 shadow-soft transition-colors hover:bg-inset"
+            >
+              <button onClick={() => openVideo(video)} className="w-28 flex-shrink-0 overflow-hidden rounded-xl sm:w-36">
+                <Thumb video={video}>
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/40">
+                    <Play className="h-7 w-7 fill-white text-white opacity-0 transition-opacity group-hover:opacity-100" />
+                  </div>
+                  <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white">
+                    {video.duration}
+                  </span>
+                </Thumb>
+              </button>
+
+              <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+                <div>
+                  <h3 className="truncate text-[14.5px] font-semibold text-foreground">{video.title}</h3>
+                  <p className="mt-0.5 text-[12.5px] text-muted-foreground">{video.date}</p>
+                </div>
+                <div className="flex items-center gap-3 text-[12px] text-ink3">
+                  <span className="rounded-md bg-inset px-2 py-0.5 font-semibold text-muted-foreground">{video.aspectRatio}</span>
+                  {video.formattedFileSize && <span>{video.formattedFileSize}</span>}
+                </div>
+              </div>
+
+              <div className="flex flex-shrink-0 items-start gap-1.5">
+                <button
+                  disabled={!video.outputPath}
+                  onClick={() => openVideo(video)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-50"
+                  title="Download"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+                <button className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-foreground" title="Share">
+                  <Share2 className="h-4 w-4" />
+                </button>
+                <button className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-destructive" title="Delete">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </div>
+  )
+}
+
+export default function VideosPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
+          Loading videos…
+        </div>
+      }
+    >
+      <VideosPageContent />
+    </Suspense>
   )
 }

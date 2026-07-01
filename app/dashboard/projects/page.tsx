@@ -3,21 +3,43 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { FolderOpen, ArrowRight, RefreshCcw, Play, Clock4, FileText, AlertCircle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { RefreshCcw, Play, AlertCircle, Plus, ArrowRight } from 'lucide-react'
 import { retryProject } from '@/store/projectSlice'
 import { useProject } from '@/hooks/useProject'
 import { useAppDispatch } from '@/hooks/useAuth'
 
+const statusBadge = (status?: string): { label: string; cls: string } => {
+  switch (status) {
+    case 'completed':
+      return { label: 'Done', cls: 'bg-good-soft text-good' }
+    case 'processing':
+      return { label: 'Rendering', cls: 'bg-warn-soft text-warn' }
+    case 'failed':
+      return { label: 'Failed', cls: 'bg-accent-soft text-primary' }
+    default:
+      return { label: 'Draft', cls: 'bg-inset text-muted-foreground' }
+  }
+}
+
+const gradientFor = (seed: number) => {
+  const palette = [
+    'linear-gradient(160deg,#2A1E3A,#15131C)',
+    'linear-gradient(160deg,#11324A,#0C1A26)',
+    'linear-gradient(160deg,#16302A,#0C1A17)',
+    'linear-gradient(160deg,#2E2410,#171206)',
+    'linear-gradient(160deg,#3A1320,#1C0C12)',
+    'linear-gradient(160deg,#1A1430,#0E0B1A)',
+  ]
+  return palette[seed % palette.length]
+}
+
+const prettyTemplate = (t?: string) =>
+  (t || 'Project').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+
 export default function ProjectsPage() {
   const router = useRouter()
   const dispatch = useAppDispatch()
-  const {
-    projects,
-    isFetchingProjects,
-    fetchProjectsError,
-    fetchProjects,
-  } = useProject()
+  const { projects, isFetchingProjects, fetchProjectsError, fetchProjects } = useProject()
   const [retryingId, setRetryingId] = useState<number | null>(null)
   const [retryErrors, setRetryErrors] = useState<Record<number, string>>({})
 
@@ -25,15 +47,22 @@ export default function ProjectsPage() {
     fetchProjects().catch(() => {})
   }, [fetchProjects])
 
-  const handleSelectProject = (projectId: number) => {
-    router.push(`/dashboard/create?projectId=${projectId}`)
+  const openProject = (project: { id: number; template_type?: string }) => {
+    if (project.template_type === 'ai_explainer_video') {
+      router.push(`/dashboard/explainer/${project.id}`)
+    } else {
+      router.push(`/dashboard/create?projectId=${project.id}`)
+    }
   }
 
   const handleRetryProject = async (e: React.MouseEvent, projectId: number) => {
     e.stopPropagation()
     setRetryingId(projectId)
-    setRetryErrors((prev) => { const next = { ...prev }; delete next[projectId]; return next })
-
+    setRetryErrors((prev) => {
+      const next = { ...prev }
+      delete next[projectId]
+      return next
+    })
     try {
       await dispatch(retryProject(projectId)).unwrap()
       await fetchProjects()
@@ -46,144 +75,150 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="mb-6 sm:mb-8"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-primary">
-                <FolderOpen className="h-5 w-5" />
-                <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Projects</h1>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Browse all created projects and continue editing or processing them.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fetchProjects().catch(() => {})}
-                className="inline-flex items-center gap-2"
-                disabled={isFetchingProjects}
-              >
-                <RefreshCcw className="h-4 w-4" />
-                Refresh
-              </Button>
-              <Button
-                onClick={() => router.push('/dashboard/templates')}
-                className="inline-flex items-center gap-2"
-              >
-                New Project
-              </Button>
-            </div>
-          </div>
-        </motion.div>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-[26px] font-semibold tracking-tight text-foreground">Projects</h1>
+          <p className="mt-1 text-[15px] text-muted-foreground">
+            Every project you&apos;ve created — continue editing, render, or retry.
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => fetchProjects().catch(() => {})}
+            disabled={isFetchingProjects}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold text-foreground shadow-soft disabled:opacity-60"
+          >
+            <RefreshCcw className={`h-4 w-4 ${isFetchingProjects ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <button
+            onClick={() => router.push('/dashboard/templates')}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground shadow-soft"
+          >
+            <Plus className="h-4 w-4" /> New project
+          </button>
+        </div>
+      </div>
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="space-y-4"
-        >
-          {isFetchingProjects ? (
-            <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-              Loading projects...
-            </div>
-          ) : fetchProjectsError ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800">
-              {fetchProjectsError}
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-              No projects found yet. Create a new one from Templates.
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {projects.map((project) => (
-                <motion.div
-                  key={project.id}
-                  whileHover={project.status !== 'failed' ? { y: -2 } : {}}
-                  className="group w-full rounded-3xl border border-border bg-card p-5 transition-shadow hover:shadow-lg"
+      {fetchProjectsError && (
+        <div className="rounded-xl border border-accent-line bg-accent-soft px-4 py-3 text-sm text-primary">
+          {fetchProjectsError}
+        </div>
+      )}
+
+      {isFetchingProjects && projects.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
+          Loading projects…
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-12 text-center">
+          <p className="text-sm text-muted-foreground">No projects yet. Start from a template.</p>
+          <button
+            onClick={() => router.push('/dashboard/templates')}
+            className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground"
+          >
+            <Plus className="h-4 w-4" /> Browse templates
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {projects.map((project) => {
+            const badge = statusBadge(project.status)
+            const isFailed = project.status === 'failed'
+            return (
+              <motion.div
+                key={project.id}
+                whileHover={{ y: -2 }}
+                className="group overflow-hidden rounded-2xl border border-border bg-card shadow-soft"
+              >
+                <button
+                  type="button"
+                  onClick={() => openProject(project)}
+                  disabled={isFailed}
+                  className="block w-full text-left disabled:cursor-default"
                 >
-                  {project.status === 'failed' && (
-                    <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-3 flex items-start gap-3">
-                      <AlertCircle className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-orange-900">Processing Failed</p>
+                  <div
+                    className="relative flex aspect-[16/10] items-center justify-center overflow-hidden"
+                    style={{ background: gradientFor(project.id) }}
+                  >
+                    {project.thumbnail_path ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={project.thumbnail_path}
+                        alt={project.title || 'thumbnail'}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-[repeating-linear-gradient(125deg,rgba(255,255,255,.04),rgba(255,255,255,.04)_7px,transparent_7px,transparent_15px)]" />
+                    )}
+                    {!isFailed && (
+                      <span className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/15 opacity-0 backdrop-blur transition-opacity group-hover:opacity-100">
+                        <Play className="ml-0.5 h-4 w-4 fill-white text-white" />
+                      </span>
+                    )}
+                    <span className={`absolute right-2.5 top-2.5 rounded-md px-2 py-0.5 text-[10.5px] font-bold ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                    {project.status === 'processing' && (
+                      <span className="absolute bottom-2.5 left-2.5 rounded-md bg-black/40 px-2 py-0.5 font-mono text-[10.5px] text-white backdrop-blur">
+                        {project.progress ?? 0}%
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <h2 className="truncate text-[14.5px] font-semibold text-foreground">
+                        {project.title || 'Untitled Project'}
+                      </h2>
+                      {!isFailed && (
+                        <ArrowRight className="h-4 w-4 flex-shrink-0 text-ink3 transition-transform group-hover:translate-x-0.5" />
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-[12px] text-ink3">
+                      <span className="truncate">{prettyTemplate(project.template_type)}</span>
+                      <span className="h-0.5 w-0.5 rounded-full bg-ink3" />
+                      <span>ID {project.id}</span>
+                    </div>
+                  </div>
+                </button>
+
+                {isFailed && (
+                  <div className="border-t border-line2 px-4 pb-4 pt-3">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warn" />
+                      <div className="min-w-0 flex-1">
                         {project.failed_step && (
-                          <p className="text-xs text-orange-800 mt-1">
-                            Failed at: <span className="font-medium capitalize">{project.failed_step.replace(/_/g, ' ')}</span>
+                          <p className="text-[11.5px] text-muted-foreground">
+                            Failed at{' '}
+                            <span className="font-medium capitalize">{project.failed_step.replace(/_/g, ' ')}</span>
                           </p>
                         )}
                         {project.error_message && (
-                          <p className="text-xs text-orange-700 mt-1 break-words">{project.error_message}</p>
+                          <p className="mt-0.5 line-clamp-2 break-words text-[11px] text-ink3">{project.error_message}</p>
                         )}
                         {retryErrors[project.id] && (
-                          <p className="text-xs text-red-700 mt-1">{retryErrors[project.id]}</p>
+                          <p className="mt-0.5 text-[11px] text-primary">{retryErrors[project.id]}</p>
                         )}
                       </div>
                     </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleSelectProject(project.id)}
-                    disabled={project.status === 'failed'}
-                    className="w-full text-left disabled:opacity-50"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground uppercase tracking-[0.24em]">
-                          Project ID {project.id}
-                        </p>
-                        <h2 className="mt-2 text-lg font-semibold text-foreground">
-                          {project.title || 'Untitled Project'}
-                        </h2>
-                      </div>
-                      <div className="rounded-2xl bg-primary/10 p-2 text-primary">
-                        <ArrowRight className="h-4 w-4" />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        <span>{project.template_type || 'Unknown template'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Clock4 className="h-4 w-4" />
-                        <span>{project.progress ?? 0}% progress</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Play className="h-4 w-4" />
-                        <span className="capitalize">{project.status ?? 'pending'}</span>
-                      </div>
-                    </div>
-                  </button>
-
-                  {project.status === 'failed' && (
-                    <Button
+                    <button
                       onClick={(e) => handleRetryProject(e, project.id)}
                       disabled={retryingId === project.id}
-                      size="sm"
-                      className="mt-4 w-full"
-                      variant="outline"
+                      className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground disabled:opacity-60"
                     >
-                      <RefreshCcw className={`h-3 w-3 mr-2 ${retryingId === project.id ? 'animate-spin' : ''}`} />
-                      {retryingId === project.id ? 'Retrying...' : 'Retry Processing'}
-                    </Button>
-                  )}
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </motion.div>
-      </div>
+                      <RefreshCcw className={`h-3.5 w-3.5 ${retryingId === project.id ? 'animate-spin' : ''}`} />
+                      {retryingId === project.id ? 'Retrying…' : 'Retry processing'}
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

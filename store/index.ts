@@ -4,11 +4,13 @@ import { persistStore, persistReducer } from 'redux-persist'
 import authReducer from './authSlice'
 import projectReducer from './projectSlice'
 import templateReducer from './templateSlice'
+import billingReducer from './billingSlice'
 
 const rootReducer = combineReducers({
   auth: authReducer,
   project: projectReducer,
   template: templateReducer,
+  billing: billingReducer,
 })
 
 const persistConfig = {
