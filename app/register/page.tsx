@@ -1,17 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useAuth } from '@/hooks/useAuth'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2 } from 'lucide-react'
 import PhoneInput from 'react-phone-number-input'
 import 'react-phone-number-input/style.css'
+import { useAuth } from '@/hooks/useAuth'
+import { AuthShell, AuthAlert, AuthLabel, authInputClass, authButtonClass } from '@/components/auth/auth-shell'
 
 export default function RegisterPage() {
   const [name, setName] = useState('')
@@ -20,122 +16,143 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const router = useRouter()
-  const { register, isLoading, error, clearError } = useAuth()
+  const { register, isLoading, error, clearError, fetchCurrentUser, isAuthenticated } = useAuth()
+
+  useEffect(() => {
+    clearError()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (isAuthenticated) router.replace('/dashboard')
+  }, [isAuthenticated, router])
+
+  const mismatch = !!confirmPassword && password !== confirmPassword
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     clearError()
-    
-    if (password !== confirmPassword) {
-      return
-    }
-    
-    const result = await register({ name, email, phone: phone || '', password, password_confirmation: confirmPassword })
-    
+    if (mismatch) return
+
+    const result = await register({
+      name,
+      email,
+      phone: phone || '',
+      password,
+      password_confirmation: confirmPassword,
+    })
+
     if (result.meta.requestStatus === 'fulfilled') {
+      await fetchCurrentUser()
       router.push('/dashboard')
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Create account</CardTitle>
-          <CardDescription className="text-center">
-            Enter your information to create your account
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Enter your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <PhoneInput
-                international
-                defaultCountry="US"
-                value={phone}
-                onChange={setPhone}
-                placeholder="Enter your phone number"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-              />
-              {password !== confirmPassword && confirmPassword && (
-                <p className="text-sm text-destructive">Passwords do not match</p>
-              )}
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4 mt-4">
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading || password !== confirmPassword}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                'Create account'
-              )}
-            </Button>
-            <div className="text-center text-sm">
-              Already have an account?{' '}
-              <Link href="/login" className="text-primary hover:underline">
-                Sign in
-              </Link>
-            </div>
-          </CardFooter>
-        </form>
-      </Card>
-    </div>
+    <AuthShell
+      title="Create your account"
+      subtitle="Start free — make your first video in minutes."
+      footer={
+        <>
+          Already have an account?{' '}
+          <Link href="/login" className="font-semibold text-primary hover:underline">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <AuthAlert kind="error">{error}</AuthAlert>}
+
+        <div>
+          <AuthLabel htmlFor="name">Full name</AuthLabel>
+          <input
+            id="name"
+            type="text"
+            className={authInputClass}
+            placeholder="Your name"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value)
+              if (error) clearError()
+            }}
+            autoComplete="name"
+            required
+          />
+        </div>
+
+        <div>
+          <AuthLabel htmlFor="email">Email</AuthLabel>
+          <input
+            id="email"
+            type="email"
+            className={authInputClass}
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              if (error) clearError()
+            }}
+            autoComplete="email"
+            required
+          />
+        </div>
+
+        <div>
+          <AuthLabel htmlFor="phone">Phone</AuthLabel>
+          <PhoneInput
+            international
+            defaultCountry="US"
+            value={phone}
+            onChange={setPhone}
+            placeholder="Enter your phone number"
+            className="flex h-11 w-full items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm text-foreground transition-colors focus-within:border-primary [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:text-foreground [&_.PhoneInputInput]:outline-none [&_.PhoneInputInput]:placeholder:text-ink3"
+          />
+        </div>
+
+        <div>
+          <AuthLabel htmlFor="password">Password</AuthLabel>
+          <input
+            id="password"
+            type="password"
+            className={authInputClass}
+            placeholder="8–18 characters"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value)
+              if (error) clearError()
+            }}
+            autoComplete="new-password"
+            required
+          />
+        </div>
+
+        <div>
+          <AuthLabel htmlFor="confirmPassword">Confirm password</AuthLabel>
+          <input
+            id="confirmPassword"
+            type="password"
+            className={authInputClass}
+            placeholder="Re-enter your password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
+            required
+          />
+          {mismatch && <p className="mt-1.5 text-xs text-destructive">Passwords do not match.</p>}
+        </div>
+
+        <button type="submit" disabled={isLoading || mismatch} className={authButtonClass}>
+          {isLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Creating account…
+            </>
+          ) : (
+            'Create account'
+          )}
+        </button>
+      </form>
+    </AuthShell>
   )
 }
