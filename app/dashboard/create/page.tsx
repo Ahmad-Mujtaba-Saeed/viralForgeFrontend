@@ -934,6 +934,7 @@ function CreatePageContent() {
               progress={shownProgress}
               isUploading={isUploading}
               outputVideoUrl={currentProject?.output_path}
+              outputVideos={currentProject?.output_videos}
               lengthLabel={lengthLabel}
               scenesLabel={isFetching ? '…' : '—'}
             />

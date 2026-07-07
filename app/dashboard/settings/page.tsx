@@ -2,7 +2,20 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { User as UserIcon, Lock, Check, AlertCircle, Loader2, Plug, Palette, ExternalLink } from 'lucide-react'
+import {
+  User as UserIcon,
+  Lock,
+  Check,
+  AlertCircle,
+  Loader2,
+  Plug,
+  Palette,
+  ExternalLink,
+  Plus,
+  Trash2,
+  Star,
+  KeyRound,
+} from 'lucide-react'
 import { useAuth, useAppDispatch } from '@/hooks/useAuth'
 import { updateProfile, changePassword } from '@/store/authSlice'
 import { cn } from '@/lib/utils'
@@ -49,22 +62,208 @@ function Banner({ kind, text }: { kind: 'success' | 'error'; text: string }) {
   )
 }
 
+type ApiKey = {
+  id: number
+  provider: string
+  label: string | null
+  credential_masked: string
+  is_default: boolean
+  is_active: boolean
+  failure_count: number
+  last_error: string | null
+  last_error_at: string | null
+  last_used_at: string | null
+  last_success_at: string | null
+}
+
+type CredentialGroups = Record<string, ApiKey[]>
+
 type YoutubeDownloaderState = {
   provider: string
   options: string[]
   rapidapi_configured: boolean
   apify_configured: boolean
+  credentials: CredentialGroups
 }
 
-const PROVIDER_META: Record<string, { label: string; desc: string }> = {
-  rapidapi: { label: 'RapidAPI', desc: 'youtube-info-download-api (poll-based download)' },
-  apify: { label: 'Apify', desc: 'truefetch/youtube-video-downloader actor' },
+const PROVIDER_META: Record<string, { label: string; desc: string; keyNoun: string }> = {
+  rapidapi: { label: 'RapidAPI', desc: 'youtube-info-download-api (poll-based download)', keyNoun: 'API key' },
+  apify: { label: 'Apify', desc: 'truefetch/youtube-video-downloader actor', keyNoun: 'API token' },
+}
+
+function hasActiveKey(credentials: CredentialGroups | undefined, provider: string): boolean {
+  return (credentials?.[provider] ?? []).some((k) => k.is_active)
+}
+
+function ProviderKeyManager({
+  provider,
+  keys,
+  busy,
+  setBusy,
+  onCredentials,
+  onError,
+}: {
+  provider: string
+  keys: ApiKey[]
+  busy: boolean
+  setBusy: (b: boolean) => void
+  onCredentials: (credentials: CredentialGroups, successText: string) => void
+  onError: (text: string) => void
+}) {
+  const meta = PROVIDER_META[provider] ?? { label: provider, desc: '', keyNoun: 'API key' }
+  const [newKey, setNewKey] = useState('')
+  const [newLabel, setNewLabel] = useState('')
+
+  const run = async (
+    action: () => Promise<{ data: { credentials: CredentialGroups } }>,
+    successText: string
+  ): Promise<boolean> => {
+    if (busy) return false
+    setBusy(true)
+    try {
+      const res = await action()
+      onCredentials(res.data.credentials, successText)
+      return true
+    } catch (err: any) {
+      onError(err?.response?.data?.message ?? `Failed to update ${meta.label} keys.`)
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const addKey = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newKey.trim()) return
+    const ok = await run(
+      () => api.post('/api/admin/credentials', { provider, label: newLabel.trim() || null, credential: newKey.trim() }),
+      `${meta.label} ${meta.keyNoun} added.`
+    )
+    if (ok) {
+      setNewKey('')
+      setNewLabel('')
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-card p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <KeyRound className="h-4 w-4 text-accent" />
+        <span className="text-[13px] font-semibold text-foreground">{meta.label} keys</span>
+        <span className="text-xs text-ink3">— tried in order, default first; on failure the next key is used automatically.</span>
+      </div>
+
+      {keys.length === 0 ? (
+        <p className="mb-3 text-xs text-warn">No keys yet — this provider will fail until you add one.</p>
+      ) : (
+        <ul className="mb-3 space-y-2">
+          {keys.map((k) => (
+            <li
+              key={k.id}
+              className={cn(
+                'rounded-lg border px-3 py-2.5',
+                k.is_active ? 'border-border bg-card' : 'border-border bg-card opacity-55'
+              )}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="font-mono text-xs text-foreground">{k.credential_masked}</code>
+                {k.label && <span className="text-xs text-ink3">{k.label}</span>}
+                {k.is_default && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
+                    <Star className="h-3 w-3" /> Default
+                  </span>
+                )}
+                {!k.is_active && (
+                  <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-medium text-warn">Disabled</span>
+                )}
+                {k.failure_count > 0 && (
+                  <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-medium text-warn">
+                    {k.failure_count} failure{k.failure_count > 1 ? 's' : ''}
+                  </span>
+                )}
+                <span className="ml-auto flex items-center gap-1.5">
+                  {!k.is_default && k.is_active && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        run(() => api.post(`/api/admin/credentials/${k.id}/default`), `Default ${meta.label} key updated.`)
+                      }
+                      className="rounded-lg border border-border px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/50 disabled:opacity-60"
+                    >
+                      Set default
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      run(
+                        () => api.put(`/api/admin/credentials/${k.id}`, { is_active: !k.is_active }),
+                        `${meta.label} key ${k.is_active ? 'disabled' : 'enabled'}.`
+                      )
+                    }
+                    className="rounded-lg border border-border px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/50 disabled:opacity-60"
+                  >
+                    {k.is_active ? 'Disable' : 'Enable'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (window.confirm(`Delete this ${meta.label} ${meta.keyNoun}? This cannot be undone.`)) {
+                        run(() => api.delete(`/api/admin/credentials/${k.id}`), `${meta.label} key deleted.`)
+                      }
+                    }}
+                    className="rounded-lg border border-border p-1 text-warn transition-colors hover:border-warn/50 disabled:opacity-60"
+                    aria-label="Delete key"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              </div>
+              {k.last_error && (
+                <p className="mt-1.5 text-[11px] text-warn">
+                  Last error{k.last_error_at ? ` (${new Date(k.last_error_at).toLocaleString()})` : ''}: {k.last_error}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form onSubmit={addKey} className="flex flex-col gap-2 sm:flex-row">
+        <input
+          className={cn(inputCls, 'sm:w-40')}
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          placeholder="Label (optional)"
+          disabled={busy}
+        />
+        <input
+          className={cn(inputCls, 'flex-1 font-mono')}
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          placeholder={`Paste a new ${meta.label} ${meta.keyNoun}`}
+          disabled={busy}
+        />
+        <button
+          type="submit"
+          disabled={busy || !newKey.trim()}
+          className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground shadow-soft disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Plus className="h-4 w-4" /> Add key
+        </button>
+      </form>
+    </div>
+  )
 }
 
 function AdminIntegrations() {
   const [state, setState] = useState<YoutubeDownloaderState | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
+  const [keysBusy, setKeysBusy] = useState(false)
   const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
@@ -90,6 +289,20 @@ function AdminIntegrations() {
     } finally {
       setSaving(null)
     }
+  }
+
+  const applyCredentials = (credentials: CredentialGroups, successText: string) => {
+    setState((prev) =>
+      prev
+        ? {
+            ...prev,
+            credentials,
+            rapidapi_configured: hasActiveKey(credentials, 'rapidapi'),
+            apify_configured: hasActiveKey(credentials, 'apify'),
+          }
+        : prev
+    )
+    setMsg({ kind: 'success', text: successText })
   }
 
   return (
@@ -156,15 +369,32 @@ function AdminIntegrations() {
                       configured ? 'bg-good/10 text-good' : 'bg-warn-soft text-warn'
                     )}
                   >
-                    {configured ? 'API key configured' : 'Not configured'}
+                    {configured
+                      ? `${(state.credentials?.[opt] ?? []).filter((k) => k.is_active).length} active key(s)`
+                      : 'No keys configured'}
                   </span>
                 </button>
               )
             })}
           </div>
+
+          {state.options.map((opt) => (
+            <ProviderKeyManager
+              key={opt}
+              provider={opt}
+              keys={state.credentials?.[opt] ?? []}
+              busy={keysBusy}
+              setBusy={setKeysBusy}
+              onCredentials={applyCredentials}
+              onError={(text) => setMsg({ kind: 'error', text })}
+            />
+          ))}
+
           <p className="mt-3 text-xs text-ink3">
-            Both providers produce the same result. If a provider shows “Not configured”, set its API key
-            in the backend <code className="font-mono">.env</code> first.
+            Both providers produce the same result. Keys are stored in the app database (not{' '}
+            <code className="font-mono">.env</code>): the default key is used first and, if it fails, the
+            remaining active keys are tried automatically. RapidAPI keys are also used for YouTube
+            transcript fetching.
           </p>
         </div>
       )}

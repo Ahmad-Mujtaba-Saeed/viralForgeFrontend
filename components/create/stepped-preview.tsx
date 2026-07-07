@@ -3,6 +3,12 @@
 import React from "react"
 import { CaptionPreview, type CaptionKind } from "./caption-styles"
 
+interface PreviewOutputVideo {
+  url: string | null
+  thumbnail?: string | null
+  duration?: number | null
+}
+
 interface SteppedPreviewProps {
   aspectRatio?: string
   title?: string
@@ -12,6 +18,8 @@ interface SteppedPreviewProps {
   progress?: number
   isUploading?: boolean
   outputVideoUrl?: string | null
+  /** All rendered videos for multi-output templates — shows a clip switcher. */
+  outputVideos?: PreviewOutputVideo[] | null
   lengthLabel?: string
   scenesLabel?: string
 }
@@ -37,6 +45,7 @@ export function SteppedPreview({
   progress = 0,
   isUploading = false,
   outputVideoUrl = null,
+  outputVideos = null,
   lengthLabel = "~45s",
   scenesLabel = "—",
 }: SteppedPreviewProps) {
@@ -45,6 +54,13 @@ export function SteppedPreview({
   const isProcessing = (status === "processing" || isUploading) && !isComplete
   const pct = Math.min(Math.max(progress, 0), 100)
   const ringDash = `${Math.round((pct / 100) * 201)} 201`
+
+  const clips = (outputVideos ?? []).filter((v) => v?.url)
+  const [clipIndex, setClipIndex] = React.useState(0)
+  React.useEffect(() => {
+    setClipIndex(0)
+  }, [clips.length])
+  const activeVideoUrl = clips.length > 0 ? clips[Math.min(clipIndex, clips.length - 1)]?.url : outputVideoUrl
 
   const stateLabel = isComplete ? "Done" : isProcessing ? (isUploading ? "Uploading" : "Rendering") : "Preview"
 
@@ -64,9 +80,15 @@ export function SteppedPreview({
           style={{ width: w + 14, height: h + 14 }}
         >
           <div className="relative h-full w-full overflow-hidden rounded-[20px] bg-[linear-gradient(165deg,#241C2E,#13131A_60%,#0D0D12)]">
-            {isComplete && outputVideoUrl ? (
+            {isComplete && activeVideoUrl ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video src={outputVideoUrl} controls autoPlay className="h-full w-full object-contain bg-black" />
+              <video
+                key={activeVideoUrl}
+                src={activeVideoUrl}
+                controls
+                autoPlay
+                className="h-full w-full object-contain bg-black"
+              />
             ) : (
               <>
                 <div className="absolute inset-0 bg-[repeating-linear-gradient(125deg,rgba(255,255,255,.035),rgba(255,255,255,.035)_9px,transparent_9px,transparent_20px)]" />
@@ -125,6 +147,26 @@ export function SteppedPreview({
           </div>
         </div>
       </div>
+
+      {/* clip switcher for multi-video renders */}
+      {isComplete && clips.length > 1 && (
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          {clips.map((clip, i) => (
+            <button
+              key={clip.url ?? i}
+              onClick={() => setClipIndex(i)}
+              className={
+                i === Math.min(clipIndex, clips.length - 1)
+                  ? "rounded-lg bg-primary px-3 py-1.5 text-[12px] font-bold text-primary-foreground"
+                  : "rounded-lg border border-border bg-card px-3 py-1.5 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
+              }
+            >
+              Clip {i + 1}
+              {clip.duration ? ` · ${Math.round(clip.duration)}s` : ""}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex gap-2">
         {[

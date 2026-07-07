@@ -9,6 +9,7 @@ import { useProject } from '@/hooks/useProject'
 
 interface VideoItem {
   id: number
+  key: string
   title: string
   thumbnail_path: string
   duration: string
@@ -55,11 +56,19 @@ const formatProjectDate = (date?: string) => {
   return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+const formatClipDuration = (seconds?: number | null) => {
+  if (!seconds || seconds <= 0) return null
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
 const buildVideoItemFromProject = (project: any): VideoItem => {
   const aspectRatio = getAspectRatioFromTemplateType(project.template_type)
   const [width, height] = aspectRatio.split(':').map(Number)
   return {
     id: project.id,
+    key: String(project.id),
     title: project.title || project.file_name || `Project ${project.id}`,
     thumbnail_path: project.thumbnail_path,
     duration: project.formatted_duration || '0:00',
@@ -72,6 +81,26 @@ const buildVideoItemFromProject = (project: any): VideoItem => {
     templateType: project.template_type,
     formattedFileSize: project.formatted_file_size,
   }
+}
+
+/** Multi-output projects (e.g. YT + Gameplay Short) become one card per rendered clip. */
+const buildVideoItemsFromProject = (project: any): VideoItem[] => {
+  const base = buildVideoItemFromProject(project)
+  const outputs = Array.isArray(project.output_videos)
+    ? project.output_videos.filter((v: any) => v?.url)
+    : []
+
+  if (outputs.length <= 1) return [base]
+
+  return outputs.map((output: any, index: number) => ({
+    ...base,
+    key: `${project.id}-${index + 1}`,
+    title: `${base.title} · Clip ${index + 1}`,
+    thumbnail_path: output.thumbnail || base.thumbnail_path,
+    duration: formatClipDuration(output.duration) || base.duration,
+    outputPath: output.url,
+    formattedFileSize: null,
+  }))
 }
 
 const getAspectRatioValue = (video: VideoItem) => {
@@ -119,7 +148,7 @@ function VideosPageContent() {
   }, [queryParam])
 
   const videos = useMemo(
-    () => projects.filter((p) => p.output_path || p.status === 'completed').map(buildVideoItemFromProject),
+    () => projects.filter((p) => p.output_path || p.status === 'completed').flatMap(buildVideoItemsFromProject),
     [projects]
   )
 
@@ -205,7 +234,7 @@ function VideosPageContent() {
         <div className="grid auto-rows-max grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {filteredVideos.map((video, index) => (
             <motion.div
-              key={video.id}
+              key={video.key}
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.04 }}
@@ -253,7 +282,7 @@ function VideosPageContent() {
         <div className="space-y-3">
           {filteredVideos.map((video, index) => (
             <motion.div
-              key={video.id}
+              key={video.key}
               initial={{ opacity: 0, x: -16 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3, delay: index * 0.04 }}

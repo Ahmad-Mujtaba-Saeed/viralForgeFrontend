@@ -1,6 +1,14 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
 import api from '@/lib/axios'
 
+export interface ProjectOutputVideo {
+  url: string | null
+  thumbnail?: string | null
+  duration?: number | null
+  score?: number | null
+  subtitle?: string | null
+}
+
 export interface Project {
   id: number
   title: string
@@ -12,6 +20,7 @@ export interface Project {
   failed_step?: string | null
   video_path?: string | null
   output_path?: string | null
+  output_videos?: ProjectOutputVideo[]
   thumbnail_path?: string | null
   file_name?: string | null
   file_type?: string | null
