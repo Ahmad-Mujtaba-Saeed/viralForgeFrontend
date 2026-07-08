@@ -26,7 +26,7 @@ export function artKindFor(templateType: string): ArtKind {
   const t = (templateType || "").toLowerCase()
   if (t.includes("horror") || t.includes("story")) return "story"
   if (t.includes("explainer") || t.includes("tutorial")) return "tutorial"
-  if (t.includes("image")) return "listicle"
+  if (t.includes("ranking") || t.includes("image")) return "listicle"
   if (t.includes("gameplay") || t.includes("yt") || t.includes("reaction")) return "reaction"
   if (t.includes("compilation") || t.includes("compare")) return "compare"
   if (t.includes("quiz") || t.includes("trivia")) return "quiz"
