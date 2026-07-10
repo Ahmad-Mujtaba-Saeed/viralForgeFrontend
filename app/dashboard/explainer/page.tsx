@@ -3,12 +3,20 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/axios'
-import { Sparkles, Loader2 } from 'lucide-react'
+import { Sparkles, Loader2, Wand2 } from 'lucide-react'
 
 const ASPECT_RATIOS = [
   { value: '16:9', label: 'Landscape 16:9' },
   { value: '9:16', label: 'Vertical 9:16' },
   { value: '1:1', label: 'Square 1:1' },
+]
+
+const TONES = [
+  { value: '', label: 'Tone: Auto' },
+  { value: 'informative', label: 'Informative' },
+  { value: 'energetic', label: 'Energetic' },
+  { value: 'dramatic', label: 'Dramatic' },
+  { value: 'friendly', label: 'Friendly' },
 ]
 
 export default function ExplainerCreatePage() {
@@ -17,8 +25,32 @@ export default function ExplainerCreatePage() {
   const [script, setScript] = useState('')
   const [aspectRatio, setAspectRatio] = useState('16:9')
   const [targetSeconds, setTargetSeconds] = useState(60)
+  const [tone, setTone] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const handleGenerateScript = async () => {
+    if (title.trim().length < 3 || generating) return
+    if (script.trim().length >= 10 && !window.confirm('Replace your current script with an AI-written one?')) {
+      return
+    }
+    setError(null)
+    setGenerating(true)
+    try {
+      const res = await api.post('/api/explainer/generate-script', {
+        title: title.trim(),
+        target_seconds: targetSeconds,
+        aspect_ratio: aspectRatio,
+        ...(tone ? { tone } : {}),
+      })
+      setScript(res.data?.data?.script ?? '')
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Script generation failed — you can write the script yourself.')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,16 +106,42 @@ export default function ExplainerCreatePage() {
         </div>
 
         <div>
-          <label className="mb-2 block text-[13px] font-semibold text-foreground">Script</label>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <label className="block text-[13px] font-semibold text-foreground">Script</label>
+            <div className="flex items-center gap-2">
+              <select
+                value={tone}
+                onChange={(e) => setTone(e.target.value)}
+                className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+              >
+                {TONES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleGenerateScript}
+                disabled={title.trim().length < 3 || generating}
+                title={title.trim().length < 3 ? 'Add a title first' : 'Write the script with AI'}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-accent-line bg-accent-soft px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-accent-soft/70 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                {generating ? 'Writing…' : 'Generate with AI'}
+              </button>
+            </div>
+          </div>
           <textarea
             value={script}
             onChange={(e) => setScript(e.target.value)}
             rows={10}
-            placeholder="Paste or write your script here. e.g. 'Today we compare the maps of GTA V and GTA VI...'"
+            placeholder="Paste or write your script here — or add a title and click Generate with AI."
             className={`${inputCls} resize-y leading-relaxed`}
           />
           <p className="mt-1.5 text-xs text-ink3">
-            The AI will split this into scenes and decide where images vs. bullet points go.
+            The AI will split this into scenes and decide where images vs. bullet points go. Generated scripts are fully
+            editable before you continue.
           </p>
         </div>
 

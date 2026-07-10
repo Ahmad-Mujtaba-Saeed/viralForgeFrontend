@@ -60,6 +60,15 @@ interface Storyboard {
   color_schemes?: Theme[]
   narration_enabled?: boolean
   music_enabled?: boolean
+  composition_mode?: string
+  composition_modes?: string[]
+  chapter_plan?: { chapters?: { id?: string; mode?: string; scene_ids?: string[] }[] } | null
+}
+
+const COMPOSITION_LABELS: Record<string, string> = {
+  hybrid: 'Hybrid (AI Auto)',
+  canvas_journey: 'Canvas Journey',
+  slides: 'Slides',
 }
 
 const TEMPLATE_ICON: Record<string, React.ReactNode> = {
@@ -80,6 +89,7 @@ export default function StoryboardPage() {
   const [board, setBoard] = useState<Storyboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [rendering, setRendering] = useState(false)
+  const [switchingMode, setSwitchingMode] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const explainerCost = costFor('ai_explainer_video')
@@ -181,6 +191,20 @@ export default function StoryboardPage() {
     }
   }
 
+  const handleCompositionMode = async (mode: string) => {
+    if (mode === board?.composition_mode || switchingMode) return
+    setSwitchingMode(mode)
+    try {
+      // Hybrid may take a while on first switch: the AI plans the chapters.
+      await api.post(`/api/explainer/projects/${id}/composition-mode`, { mode })
+      await fetchBoard()
+    } catch {
+      alert('Failed to switch composition style')
+    } finally {
+      setSwitchingMode(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center text-muted-foreground">
@@ -217,6 +241,50 @@ export default function StoryboardPage() {
           </button>
         </div>
       </header>
+
+      {(board.composition_modes?.length ?? 0) > 0 && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Composition: </span>
+            <span className="font-semibold text-foreground">
+              {COMPOSITION_LABELS[board.composition_mode ?? ''] ?? board.composition_mode}
+            </span>
+            {board.composition_mode === 'hybrid' && board.chapter_plan?.chapters?.length ? (
+              <span className="ml-2 text-xs text-muted-foreground">
+                {board.chapter_plan.chapters.length} chapters ·{' '}
+                {board.chapter_plan.chapters.map((c) => c.mode).join(' → ')}
+              </span>
+            ) : null}
+          </div>
+          <div className="inline-flex overflow-hidden rounded-lg border border-border">
+            {(board.composition_modes ?? []).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => handleCompositionMode(mode)}
+                disabled={switchingMode !== null}
+                title={
+                  mode === 'hybrid'
+                    ? 'The AI mixes camera journeys and slide cuts to fit the script'
+                    : mode === 'canvas_journey'
+                      ? 'One continuous camera flight across every scene'
+                      : 'Classic scene-by-scene transitions'
+                }
+                className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
+                  board.composition_mode === mode
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-card text-muted-foreground hover:bg-inset'
+                }`}
+              >
+                {switchingMode === mode ? (
+                  <Loader2 className="mx-3 h-4 w-4 animate-spin" />
+                ) : (
+                  COMPOSITION_LABELS[mode] ?? mode
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {board.theme && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
