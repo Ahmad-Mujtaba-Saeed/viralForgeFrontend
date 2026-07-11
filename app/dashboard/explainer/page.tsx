@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/axios'
 import { Sparkles, Loader2, Wand2, Play, Square } from 'lucide-react'
+import { MusicPicker } from '@/components/create/music-picker'
 
 const ASPECT_RATIOS = [
   { value: '16:9', label: 'Landscape 16:9' },
@@ -36,12 +37,35 @@ export default function ExplainerCreatePage() {
   const [previewing, setPreviewing] = useState(false)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Background music: auto (match mood) by default, or a category — with an
+  // auditionable track list and a volume slider, like every other template.
+  const [musicOptions, setMusicOptions] = useState<Record<string, string>>({
+    none: 'None',
+    auto: 'Auto — match mood',
+  })
+  const [musicCategory, setMusicCategory] = useState('auto')
+  const [musicTrackId, setMusicTrackId] = useState('')
+  const [musicVolume, setMusicVolume] = useState(0.09)
+
   useEffect(() => {
     api
       .get('/api/tts/voices', { params: { template: 'ai_explainer_video' } })
       .then((res) => {
         setVoices(res.data?.voices ?? {})
         setVoice(res.data?.default ?? '')
+      })
+      .catch(() => {})
+    api
+      .get('/api/music/options')
+      .then((res) => {
+        const categories: string[] = res.data?.categories ?? []
+        setMusicOptions({
+          none: 'None',
+          auto: 'Auto — match mood',
+          ...Object.fromEntries(
+            categories.map((c) => [c, c.charAt(0).toUpperCase() + c.slice(1)])
+          ),
+        })
       })
       .catch(() => {})
     return () => {
@@ -113,6 +137,9 @@ export default function ExplainerCreatePage() {
         aspect_ratio: aspectRatio,
         target_seconds: targetSeconds,
         ...(voice ? { tts_voice: voice } : {}),
+        music_category: musicCategory,
+        ...(musicTrackId ? { music_track_id: musicTrackId } : {}),
+        music_volume: musicVolume,
       })
       const id = res.data?.data?.id
       router.push(`/dashboard/explainer/${id}`)
@@ -241,6 +268,18 @@ export default function ExplainerCreatePage() {
             <p className="mt-1.5 text-xs text-ink3">Narrates every scene. Press play to hear a sample.</p>
           </div>
         )}
+
+        <MusicPicker
+          options={musicOptions}
+          category={musicCategory}
+          trackId={musicTrackId}
+          volume={musicVolume}
+          onChange={(patch) => {
+            if (patch.music_category !== undefined) setMusicCategory(patch.music_category)
+            if (patch.music_track_id !== undefined) setMusicTrackId(patch.music_track_id)
+            if (patch.music_volume !== undefined) setMusicVolume(patch.music_volume)
+          }}
+        />
 
         {error && (
           <div className="rounded-xl border border-accent-line bg-accent-soft px-4 py-3 text-sm text-primary">{error}</div>

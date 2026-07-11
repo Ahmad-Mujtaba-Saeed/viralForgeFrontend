@@ -26,6 +26,7 @@ import { updateCurrentProject, retryProject } from '@/store/projectSlice'
 import { SteppedPreview } from '@/components/create/stepped-preview'
 import { CaptionSample, captionStyleFor } from '@/components/create/caption-styles'
 import { isSourceField, voiceLabel, voiceColor, prettyLabel } from '@/components/create/field-steps'
+import { MusicPicker } from '@/components/create/music-picker'
 
 type StepKey = 'source' | 'style' | 'generate'
 
@@ -363,6 +364,27 @@ function CreatePageContent() {
       )
     }
 
+    if (fieldKey === 'music_category') {
+      const categoryOptions: Record<string, string> = Array.isArray(fieldSchema.options)
+        ? Object.fromEntries((fieldSchema.options as unknown[]).map((o) => [String(o), prettyLabel(o)]))
+        : Object.fromEntries(Object.entries(fieldSchema.options ?? {}).map(([k, v]) => [k, String(v)]))
+      return (
+        <MusicPicker
+          key={fieldKey}
+          options={categoryOptions}
+          category={String(value ?? fieldSchema.default ?? 'none')}
+          trackId={String(templateSettings['music_track_id'] ?? '')}
+          volume={Number(
+            templateSettings['music_volume'] ?? schema['music_volume']?.default ?? 0.12
+          )}
+          onChange={(patch) => setTemplateSettings((prev) => ({ ...prev, ...patch }))}
+        />
+      )
+    }
+
+    // Rendered inside the music picker above — never as a bare number input.
+    if (fieldKey === 'music_volume') return null
+
     if (fieldKey === 'tts_voice' && optionList.length) {
       return (
         <div key={fieldKey}>
@@ -636,6 +658,7 @@ function CreatePageContent() {
   const isStyleField = (k: string, s: any) =>
     k === 'caption_template' ||
     k === 'tts_voice' ||
+    k === 'music_volume' || // lives inside the music picker, not step 1
     s.type === 'checkbox' ||
     (s.type === 'select' && !isFieldRequired(k, s))
 
