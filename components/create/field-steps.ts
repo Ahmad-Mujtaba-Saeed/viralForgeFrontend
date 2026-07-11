@@ -16,7 +16,21 @@ export function isSourceField(key: string, schema: any): boolean {
   return schema?.type === "file" || SOURCE_KEYS.has(key)
 }
 
-/** Turn a TTS voice id (e.g. "am_michael", "bf_emma") into a friendly name + tone. */
+/** OpenAI gpt-4o-mini-tts voices (active when the admin switches the TTS engine). */
+const OPENAI_VOICES: Record<string, string> = {
+  alloy: "Neutral · Balanced",
+  echo: "Clear · Professional",
+  fable: "Expressive · Narrative",
+  onyx: "Deep · Authoritative",
+  nova: "Young · Upbeat",
+  shimmer: "Soft · Gentle",
+  ash: "Warm · Conversational",
+  ballad: "Smooth · Storytelling",
+  coral: "Friendly · Energetic",
+  sage: "Calm · Mature",
+}
+
+/** Turn a TTS voice id (e.g. "am_michael", "fable") into a friendly name + tone. */
 export function voiceLabel(id: string): { name: string; tone: string } {
   if (!id) return { name: "Default", tone: "Voice" }
   const m = /^([ab])([mf])_(.+)$/.exec(id)
@@ -25,6 +39,9 @@ export function voiceLabel(id: string): { name: string; tone: string } {
     const gender = m[2] === "f" ? "F" : "M"
     const name = m[3].charAt(0).toUpperCase() + m[3].slice(1)
     return { name, tone: `${accent} · ${gender}` }
+  }
+  if (OPENAI_VOICES[id]) {
+    return { name: id.charAt(0).toUpperCase() + id.slice(1), tone: OPENAI_VOICES[id] }
   }
   const name = id.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
   return { name, tone: "Voice" }

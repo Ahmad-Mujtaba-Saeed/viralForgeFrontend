@@ -21,6 +21,7 @@ import {
   CreditCard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -38,6 +39,8 @@ const mainNavItems = [
   { icon: CreditCard, label: "Billing & Credits", href: "/dashboard/billing" },
 ]
 
+const adminNavItem = { icon: BarChart3, label: "AI Costs", href: "/dashboard/admin/costs" }
+
 const bottomNavItems = [
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   { icon: HelpCircle, label: "Help", href: "/dashboard/help" },
@@ -50,6 +53,8 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname()
+  const { user } = useAuth()
+  const navItems = user?.is_admin ? [...mainNavItems, adminNavItem] : mainNavItems
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -132,7 +137,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* Main Navigation */}
         <nav className="flex-1 px-3 py-2 overflow-y-auto">
           <ul className="space-y-1">
-            {mainNavItems.map((item) => {
+            {navItems.map((item) => {
               const isActive = pathname === item.href
               return (
                 <li key={item.href}>

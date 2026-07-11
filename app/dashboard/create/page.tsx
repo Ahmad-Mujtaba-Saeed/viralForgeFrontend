@@ -16,6 +16,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import api from '@/lib/axios'
 import { useProject } from '@/hooks/useProject'
 import { useBilling } from '@/hooks/useBilling'
 import { useProjectProgress } from '@/hooks/usePusher'
@@ -67,6 +68,51 @@ function CreatePageContent() {
   // Synchronous re-entry guard so a fast double-click can't fire two renders.
   const submittingRef = useRef(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // ---- narrator voice preview (▶ on a voice chip plays a cached sample) ----
+  const [previewVoice, setPreviewVoice] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    // Stop any playing sample when leaving the page.
+    return () => {
+      previewAudioRef.current?.pause()
+      previewAudioRef.current = null
+    }
+  }, [])
+
+  const playVoicePreview = async (voiceId: string) => {
+    // Clicking the active chip's button stops playback.
+    if (previewVoice === voiceId) {
+      previewAudioRef.current?.pause()
+      previewAudioRef.current = null
+      setPreviewVoice(null)
+      return
+    }
+
+    previewAudioRef.current?.pause()
+    previewAudioRef.current = null
+    setPreviewVoice(voiceId)
+    setPreviewLoading(true)
+
+    try {
+      const res = await api.post('/api/tts/preview', { voice: voiceId })
+      const url: string | undefined = res.data?.url
+      if (!url) throw new Error('No preview URL')
+
+      const src = url.startsWith('http') ? url : `${api.defaults.baseURL ?? ''}${url}`
+      const audio = new Audio(src)
+      previewAudioRef.current = audio
+      audio.onended = () => setPreviewVoice((v) => (v === voiceId ? null : v))
+      audio.onerror = () => setPreviewVoice((v) => (v === voiceId ? null : v))
+      await audio.play()
+    } catch {
+      setPreviewVoice((v) => (v === voiceId ? null : v))
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
 
   const selectedTemplateType = currentProject?.template_type ?? null
   const isTemplateUploadRequired = templateConfig?.requires_upload !== false
@@ -325,6 +371,7 @@ function CreatePageContent() {
             {optionList.map((opt) => {
               const { name, tone } = voiceLabel(opt)
               const active = value === opt
+              const previewing = previewVoice === opt
               return (
                 <button
                   key={opt}
@@ -335,12 +382,31 @@ function CreatePageContent() {
                   )}
                 >
                   <span
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-white"
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={previewing ? `Stop ${name} preview` : `Play ${name} preview`}
+                    title={previewing ? 'Stop preview' : 'Play preview'}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      playVoicePreview(opt)
+                    }}
+                    className="flex h-6 w-6 items-center justify-center rounded-full text-white transition-transform hover:scale-110"
                     style={{ background: voiceColor(opt) }}
                   >
-                    <svg width="11" height="11" viewBox="0 0 16 16" fill="#fff">
-                      <polygon points="5,4 10,8 5,12" />
-                    </svg>
+                    {previewing && previewLoading ? (
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="animate-spin">
+                        <circle cx="8" cy="8" r="5.5" stroke="#fff" strokeOpacity="0.35" strokeWidth="2.4" />
+                        <path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    ) : previewing ? (
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="#fff">
+                        <rect x="4" y="4" width="8" height="8" rx="1.5" />
+                      </svg>
+                    ) : (
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="#fff">
+                        <polygon points="5,4 10,8 5,12" />
+                      </svg>
+                    )}
                   </span>
                   <span className="flex flex-col leading-tight">
                     <span className="text-[13px] font-semibold text-foreground">{name}</span>

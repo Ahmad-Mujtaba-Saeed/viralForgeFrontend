@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/axios'
-import { Sparkles, Loader2, Wand2 } from 'lucide-react'
+import { Sparkles, Loader2, Wand2, Play, Square } from 'lucide-react'
 
 const ASPECT_RATIOS = [
   { value: '16:9', label: 'Landscape 16:9' },
@@ -29,6 +29,50 @@ export default function ExplainerCreatePage() {
   const [submitting, setSubmitting] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Narrator voice — options follow the admin-selected TTS engine.
+  const [voices, setVoices] = useState<Record<string, string>>({})
+  const [voice, setVoice] = useState('')
+  const [previewing, setPreviewing] = useState(false)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    api
+      .get('/api/tts/voices', { params: { template: 'ai_explainer_video' } })
+      .then((res) => {
+        setVoices(res.data?.voices ?? {})
+        setVoice(res.data?.default ?? '')
+      })
+      .catch(() => {})
+    return () => {
+      previewAudioRef.current?.pause()
+      previewAudioRef.current = null
+    }
+  }, [])
+
+  const handlePreviewVoice = async () => {
+    if (previewing) {
+      previewAudioRef.current?.pause()
+      previewAudioRef.current = null
+      setPreviewing(false)
+      return
+    }
+    if (!voice) return
+    setPreviewing(true)
+    try {
+      const res = await api.post('/api/tts/preview', { voice })
+      const url: string | undefined = res.data?.url
+      if (!url) throw new Error('No preview URL')
+      const src = url.startsWith('http') ? url : `${api.defaults.baseURL ?? ''}${url}`
+      const audio = new Audio(src)
+      previewAudioRef.current = audio
+      audio.onended = () => setPreviewing(false)
+      audio.onerror = () => setPreviewing(false)
+      await audio.play()
+    } catch {
+      setPreviewing(false)
+    }
+  }
 
   const handleGenerateScript = async () => {
     if (title.trim().length < 3 || generating) return
@@ -68,6 +112,7 @@ export default function ExplainerCreatePage() {
         script: script.trim(),
         aspect_ratio: aspectRatio,
         target_seconds: targetSeconds,
+        ...(voice ? { tts_voice: voice } : {}),
       })
       const id = res.data?.data?.id
       router.push(`/dashboard/explainer/${id}`)
@@ -171,6 +216,31 @@ export default function ExplainerCreatePage() {
             />
           </div>
         </div>
+
+        {Object.keys(voices).length > 0 && (
+          <div>
+            <label className="mb-2 block text-[13px] font-semibold text-foreground">Narrator voice</label>
+            <div className="flex items-center gap-2">
+              <select value={voice} onChange={(e) => setVoice(e.target.value)} className={inputCls}>
+                {Object.entries(voices).map(([id, label]) => (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handlePreviewVoice}
+                disabled={!voice}
+                title={previewing ? 'Stop preview' : 'Play a short voice sample'}
+                className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary transition-colors hover:border-primary/50 disabled:opacity-50"
+              >
+                {previewing ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="mt-1.5 text-xs text-ink3">Narrates every scene. Press play to hear a sample.</p>
+          </div>
+        )}
 
         {error && (
           <div className="rounded-xl border border-accent-line bg-accent-soft px-4 py-3 text-sm text-primary">{error}</div>

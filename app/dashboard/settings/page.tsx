@@ -15,6 +15,8 @@ import {
   Trash2,
   Star,
   KeyRound,
+  Mic,
+  Music,
 } from 'lucide-react'
 import { useAuth, useAppDispatch } from '@/hooks/useAuth'
 import { updateProfile, changePassword } from '@/store/authSlice'
@@ -89,6 +91,7 @@ type YoutubeDownloaderState = {
 const PROVIDER_META: Record<string, { label: string; desc: string; keyNoun: string }> = {
   rapidapi: { label: 'RapidAPI', desc: 'youtube-info-download-api (poll-based download)', keyNoun: 'API key' },
   apify: { label: 'Apify', desc: 'truefetch/youtube-video-downloader actor', keyNoun: 'API token' },
+  pixabay: { label: 'Pixabay', desc: 'Royalty-free background music API (free key)', keyNoun: 'API key' },
 }
 
 function hasActiveKey(credentials: CredentialGroups | undefined, provider: string): boolean {
@@ -538,6 +541,229 @@ function AdminLanding() {
   )
 }
 
+type TtsState = {
+  provider: string
+  effective_provider: string
+  options: string[]
+  openai_configured: boolean
+}
+
+const TTS_META: Record<string, { label: string; desc: string }> = {
+  kokoro: {
+    label: 'Kokoro (self-hosted)',
+    desc: 'Free — runs on your own server. Natural voices with real word timings; no emotion control.',
+  },
+  openai: {
+    label: 'OpenAI gpt-4o-mini-tts',
+    desc: '10 expressive voices, delivery styled per template (horror dread, hype commentary…). Paid API.',
+  },
+}
+
+function AdminNarration() {
+  const [state, setState] = useState<TtsState | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    api
+      .get('/api/admin/settings')
+      .then((res) => setState(res.data.tts))
+      .catch(() => setMsg({ kind: 'error', text: 'Failed to load narration settings.' }))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const selectProvider = async (provider: string) => {
+    if (saving || state?.provider === provider) return
+    setMsg(null)
+    setSaving(provider)
+    try {
+      const res = await api.put('/api/admin/settings', { tts_provider: provider })
+      setState(res.data.tts)
+      setMsg({ kind: 'success', text: `Narration engine switched to ${TTS_META[provider]?.label ?? provider}.` })
+    } catch {
+      setMsg({ kind: 'error', text: 'Failed to update the narration engine.' })
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 }}
+      className="mt-7 rounded-2xl border border-border bg-card p-6 shadow-soft"
+    >
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <Mic className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-[16px] font-semibold text-foreground">Narration engine</h2>
+          <p className="text-xs text-muted-foreground">
+            Admin only — which text-to-speech service narrates every template. Voice choices in the
+            create flow follow this automatically.
+          </p>
+        </div>
+      </div>
+
+      {msg && <Banner kind={msg.kind} text={msg.text} />}
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-ink3">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : !state ? (
+        <p className="py-4 text-sm text-ink3">Settings unavailable.</p>
+      ) : (
+        <div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {state.options.map((opt) => {
+              const meta = TTS_META[opt] ?? { label: opt, desc: '' }
+              const active = state.provider === opt
+              const configured = opt === 'openai' ? state.openai_configured : true
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => selectProvider(opt)}
+                  disabled={!!saving}
+                  className={cn(
+                    'relative flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition-colors',
+                    active ? 'border-primary bg-accent-soft' : 'border-border bg-card hover:border-primary/50',
+                    saving && 'cursor-not-allowed opacity-70'
+                  )}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span className="text-sm font-semibold text-foreground">{meta.label}</span>
+                    {saving === opt ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    ) : active ? (
+                      <Check className="h-4 w-4 text-primary" />
+                    ) : null}
+                  </div>
+                  <span className="text-xs text-ink3">{meta.desc}</span>
+                  <span
+                    className={cn(
+                      'mt-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+                      configured ? 'bg-good/10 text-good' : 'bg-warn-soft text-warn'
+                    )}
+                  >
+                    {opt === 'openai'
+                      ? configured
+                        ? 'OPENAI_API_KEY configured'
+                        : 'OPENAI_API_KEY missing'
+                      : 'Always available'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {state.provider === 'openai' && !state.openai_configured && (
+            <p className="mt-3 text-xs text-warn">
+              OpenAI is selected but no API key is configured — renders will fall back to Kokoro until{' '}
+              <code className="font-mono">OPENAI_API_KEY</code> is set.
+            </p>
+          )}
+          <p className="mt-3 text-xs text-ink3">
+            Switching engines changes the voice list users see when creating a video. Projects keep
+            rendering either way: a voice saved under the other engine maps to the template&apos;s default.
+          </p>
+        </div>
+      )}
+    </motion.section>
+  )
+}
+
+type MusicState = {
+  pixabay_configured: boolean
+  credentials: ApiKey[]
+}
+
+function AdminMusic() {
+  const [state, setState] = useState<MusicState | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [keysBusy, setKeysBusy] = useState(false)
+  const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    api
+      .get('/api/admin/settings')
+      .then((res) => setState(res.data.music))
+      .catch(() => setMsg({ kind: 'error', text: 'Failed to load music settings.' }))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const applyCredentials = (credentials: CredentialGroups, successText: string) => {
+    const pixabay = credentials?.pixabay ?? []
+    setState({ pixabay_configured: pixabay.some((k) => k.is_active), credentials: pixabay })
+    setMsg({ kind: 'success', text: successText })
+  }
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.14 }}
+      className="mt-7 rounded-2xl border border-border bg-card p-6 shadow-soft"
+    >
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <Music className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-[16px] font-semibold text-foreground">Background music (Pixabay)</h2>
+          <p className="text-xs text-muted-foreground">
+            Admin only — templates pull royalty-free music from the Pixabay API by category (horror,
+            cinematic, relaxing…). Free key from pixabay.com/api/docs.
+          </p>
+        </div>
+      </div>
+
+      {msg && <Banner kind={msg.kind} text={msg.text} />}
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-ink3">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : !state ? (
+        <p className="py-4 text-sm text-ink3">Settings unavailable.</p>
+      ) : (
+        <div>
+          <span
+            className={cn(
+              'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+              state.pixabay_configured ? 'bg-good/10 text-good' : 'bg-warn-soft text-warn'
+            )}
+          >
+            {state.pixabay_configured
+              ? `${state.credentials.filter((k) => k.is_active).length} active key(s)`
+              : 'No keys — templates fall back to the local music library'}
+          </span>
+
+          <ProviderKeyManager
+            provider="pixabay"
+            keys={state.credentials}
+            busy={keysBusy}
+            setBusy={setKeysBusy}
+            onCredentials={applyCredentials}
+            onError={(text) => setMsg({ kind: 'error', text })}
+          />
+
+          <p className="mt-3 text-xs text-ink3">
+            Horror shorts default to the <em>horror</em> category and the explainer matches its
+            storyboard mood automatically; every other template has music off by default — users opt in
+            per video from the create page. Downloaded tracks are cached in storage, so a track is only
+            fetched once.
+          </p>
+        </div>
+      )}
+    </motion.section>
+  )
+}
+
 export default function SettingsPage() {
   const { user, fetchCurrentUser } = useAuth()
   const dispatch = useAppDispatch()
@@ -753,6 +979,8 @@ export default function SettingsPage() {
 
       {/* Admin-only settings */}
       {user?.is_admin && <AdminLanding />}
+      {user?.is_admin && <AdminNarration />}
+      {user?.is_admin && <AdminMusic />}
       {user?.is_admin && <AdminIntegrations />}
     </div>
   )
