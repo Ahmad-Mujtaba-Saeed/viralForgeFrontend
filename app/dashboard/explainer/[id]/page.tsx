@@ -8,6 +8,8 @@ import {
   Loader2, Upload, X, Film, RefreshCw, Play, AlertTriangle,
   Image as ImageIcon, LayoutGrid, Columns2, Square, Shuffle, Move,
   Rows2, PanelRight, PanelTop, MessageSquare, Volume2, VolumeX, Music, Music2,
+  Captions, CaptionsOff, Type,
+  Swords, BarChart3, Sigma, ListChecks, Grid3x3, BookMarked,
 } from 'lucide-react'
 
 interface Slot {
@@ -60,6 +62,15 @@ interface Storyboard {
   color_schemes?: Theme[]
   narration_enabled?: boolean
   music_enabled?: boolean
+  captions_enabled?: boolean
+  font_pack?: string
+  font_packs?: Record<string, { label: string; display: string; body: string; mono: string; use_when: string }>
+  motion_style?: string
+  motion_style_auto?: string | null
+  motion_styles?: Record<string, { label: string; use_when: string }>
+  skin?: string
+  skin_auto?: string | null
+  skins?: Record<string, { label: string; use_when: string }>
   composition_mode?: string
   composition_modes?: string[]
   chapter_plan?: { chapters?: { id?: string; mode?: string; scene_ids?: string[] }[] } | null
@@ -77,6 +88,12 @@ const TEMPLATE_ICON: Record<string, React.ReactNode> = {
   split_top_bottom: <Rows2 className="h-4 w-4" />,
   full_bleed_with_side_panel: <PanelRight className="h-4 w-4" />,
   full_bleed_with_banner: <PanelTop className="h-4 w-4" />,
+  versus_card: <Swords className="h-4 w-4" />,
+  animated_chart: <BarChart3 className="h-4 w-4" />,
+  big_counter: <Sigma className="h-4 w-4" />,
+  checklist_card: <ListChecks className="h-4 w-4" />,
+  icon_grid: <Grid3x3 className="h-4 w-4" />,
+  chapter_cover: <BookMarked className="h-4 w-4" />,
 }
 
 const toggleBtn =
@@ -191,6 +208,44 @@ export default function StoryboardPage() {
     }
   }
 
+  const captionsOn = board?.captions_enabled ?? board?.aspect_ratio === '9:16'
+
+  const handleToggleCaptions = async () => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/captions`, { enabled: !captionsOn })
+      await fetchBoard()
+    } catch {
+      alert('Failed to toggle captions')
+    }
+  }
+
+  const handleFontPack = async (pack: string) => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/font-pack`, { pack })
+      await fetchBoard()
+    } catch {
+      alert('Failed to switch typography')
+    }
+  }
+
+  const handleMotionStyle = async (style: string) => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/motion-style`, { style })
+      await fetchBoard()
+    } catch {
+      alert('Failed to switch motion style')
+    }
+  }
+
+  const handleSkin = async (skin: string) => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/skin`, { skin })
+      await fetchBoard()
+    } catch {
+      alert('Failed to switch skin')
+    }
+  }
+
   const handleCompositionMode = async (mode: string) => {
     if (mode === board?.composition_mode || switchingMode) return
     setSwitchingMode(mode)
@@ -235,6 +290,10 @@ export default function StoryboardPage() {
           <button onClick={handleToggleMusic} className={toggleBtn} title="Curated background music (by scene mood)">
             {(board.music_enabled ?? true) ? <Music className="h-4 w-4 text-primary" /> : <Music2 className="h-4 w-4 text-ink3" />}
             Music {(board.music_enabled ?? true) ? 'On' : 'Off'}
+          </button>
+          <button onClick={handleToggleCaptions} className={toggleBtn} title="Karaoke word captions synced to the voiceover">
+            {captionsOn ? <Captions className="h-4 w-4 text-primary" /> : <CaptionsOff className="h-4 w-4 text-ink3" />}
+            Captions {captionsOn ? 'On' : 'Off'}
           </button>
           <button onClick={handleReanalyze} className={toggleBtn}>
             <RefreshCw className="h-4 w-4" /> Re-analyze
@@ -299,12 +358,92 @@ export default function StoryboardPage() {
               <span className="font-semibold text-foreground">{board.theme.label}</span>
             </div>
           </div>
-          <button
-            onClick={handleShuffleTheme}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-inset"
-          >
-            <Shuffle className="h-4 w-4" /> Shuffle colors
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {board.font_packs && Object.keys(board.font_packs).length > 0 && (
+              <div className="inline-flex items-center gap-2">
+                <Type className="h-4 w-4 text-muted-foreground" />
+                <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                  {['auto', ...Object.keys(board.font_packs)].map((pack) => (
+                    <button
+                      key={pack}
+                      onClick={() => handleFontPack(pack)}
+                      title={pack === 'auto' ? 'Let the system pick the typography' : board.font_packs?.[pack]?.use_when}
+                      className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                        (board.font_pack ?? 'auto') === pack
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-card text-muted-foreground hover:bg-inset'
+                      }`}
+                    >
+                      {pack === 'auto' ? 'Auto' : board.font_packs?.[pack]?.label ?? pack}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button
+              onClick={handleShuffleTheme}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-inset"
+            >
+              <Shuffle className="h-4 w-4" /> Shuffle colors
+            </button>
+          </div>
+        </div>
+      )}
+
+      {(board.motion_styles || board.skins) && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
+          {board.motion_styles && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                Motion:
+                {(board.motion_style ?? 'auto') === 'auto' && board.motion_style_auto ? (
+                  <span className="ml-1 text-xs">({board.motion_styles[board.motion_style_auto]?.label ?? board.motion_style_auto})</span>
+                ) : null}
+              </span>
+              <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                {['auto', ...Object.keys(board.motion_styles)].map((style) => (
+                  <button
+                    key={style}
+                    onClick={() => handleMotionStyle(style)}
+                    title={style === 'auto' ? 'Let the AI match the motion to the topic' : board.motion_styles?.[style]?.use_when}
+                    className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                      (board.motion_style ?? 'auto') === style
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-card text-muted-foreground hover:bg-inset'
+                    }`}
+                  >
+                    {style === 'auto' ? 'Auto' : board.motion_styles?.[style]?.label ?? style}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {board.skins && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                Skin:
+                {(board.skin ?? 'auto') === 'auto' && board.skin_auto ? (
+                  <span className="ml-1 text-xs">({board.skins[board.skin_auto]?.label ?? board.skin_auto})</span>
+                ) : null}
+              </span>
+              <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                {['auto', ...Object.keys(board.skins)].map((skin) => (
+                  <button
+                    key={skin}
+                    onClick={() => handleSkin(skin)}
+                    title={skin === 'auto' ? 'Let the AI pick the surface treatment' : board.skins?.[skin]?.use_when}
+                    className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                      (board.skin ?? 'auto') === skin
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-card text-muted-foreground hover:bg-inset'
+                    }`}
+                  >
+                    {skin === 'auto' ? 'Auto' : board.skins?.[skin]?.label ?? skin}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -545,6 +684,58 @@ function SlotCard({
         </div>
         {slot.heading && <div className="font-semibold text-primary">{slot.heading}</div>}
         {slot.body && <p className="mt-1 text-sm text-muted-foreground">{slot.body}</p>}
+      </div>
+    )
+  }
+
+  // Structured data-card contents (versus / chart / pros-cons / icon grid):
+  // read-only summaries — the renderer animates these natively.
+  if (['versus', 'chart', 'proscons', 'icons'].includes(slot.content_type)) {
+    const s = slot as Record<string, any>
+    let summary: React.ReactNode = null
+    if (slot.content_type === 'versus') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <span className="font-semibold text-primary">{s.left?.label || '?'}</span>
+          <span className="mx-1.5 text-ink3">vs</span>
+          <span className="font-semibold text-primary">{s.right?.label || '?'}</span>
+          {s.verdict ? <p className="mt-1 text-xs text-muted-foreground">Verdict: {s.verdict}</p> : null}
+        </div>
+      )
+    } else if (slot.content_type === 'chart') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <span className="font-semibold capitalize text-primary">{s.chart_type || 'bar'} chart</span>
+          <span className="ml-1.5 text-muted-foreground">
+            {(s.values || []).join(', ')} {s.unit || ''}
+          </span>
+          {s.caption ? <p className="mt-1 text-xs text-muted-foreground">{s.caption}</p> : null}
+        </div>
+      )
+    } else if (slot.content_type === 'proscons') {
+      summary = (
+        <div className="text-sm text-foreground">
+          {(s.pros || []).map((p: string, i: number) => (
+            <div key={`p${i}`} className="flex gap-1.5"><span className="text-primary">✓</span>{p}</div>
+          ))}
+          {(s.cons || []).map((c: string, i: number) => (
+            <div key={`c${i}`} className="flex gap-1.5 text-muted-foreground"><span>✗</span>{c}</div>
+          ))}
+        </div>
+      )
+    } else {
+      summary = (
+        <div className="flex flex-wrap gap-1.5 text-xs text-foreground">
+          {(s.items || []).map((it: any, i: number) => (
+            <span key={i} className="rounded bg-card px-1.5 py-0.5">{it.label || it.icon}</span>
+          ))}
+        </div>
+      )
+    }
+    return (
+      <div className="rounded-xl border border-border bg-inset p-3">
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink3">{slotKey}</div>
+        {summary}
       </div>
     )
   }
