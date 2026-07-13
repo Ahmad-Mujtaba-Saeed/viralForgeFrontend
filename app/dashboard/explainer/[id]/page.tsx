@@ -10,6 +10,8 @@ import {
   Rows2, PanelRight, PanelTop, MessageSquare, Volume2, VolumeX, Music, Music2,
   Captions, CaptionsOff, Type,
   Swords, BarChart3, Sigma, ListChecks, Grid3x3, BookMarked,
+  History, Workflow, ArrowLeftRight, Trophy, Gauge, Quote,
+  Smartphone, Images, MapPin, Newspaper,
 } from 'lucide-react'
 
 interface Slot {
@@ -23,6 +25,8 @@ interface Slot {
   body?: string
   dock?: string
   width_pct?: number
+  frame?: string
+  stock_query?: string
 }
 interface Scene {
   scene_id: string
@@ -74,6 +78,26 @@ interface Storyboard {
   composition_mode?: string
   composition_modes?: string[]
   chapter_plan?: { chapters?: { id?: string; mode?: string; scene_ids?: string[] }[] } | null
+  lint_report?: LintReportData | null
+  chapter_chip?: boolean
+  aspect_variants?: boolean
+  aspect_variants_multiplier?: number
+  brand?: { logo_url?: string | null; color?: string | null; color_applied?: boolean }
+  srt_url?: string | null
+  thumbnail_url?: string | null
+  output_videos?: { aspect: string; label: string; url: string | null }[]
+}
+
+interface LintItem {
+  severity: 'error' | 'warn' | 'info'
+  code: string
+  scene_id?: string | null
+  message: string
+}
+interface LintReportData {
+  items: LintItem[]
+  counts: { error: number; warn: number; info: number }
+  checked_at?: string
 }
 
 const COMPOSITION_LABELS: Record<string, string> = {
@@ -94,6 +118,16 @@ const TEMPLATE_ICON: Record<string, React.ReactNode> = {
   checklist_card: <ListChecks className="h-4 w-4" />,
   icon_grid: <Grid3x3 className="h-4 w-4" />,
   chapter_cover: <BookMarked className="h-4 w-4" />,
+  timeline_card: <History className="h-4 w-4" />,
+  step_flow: <Workflow className="h-4 w-4" />,
+  before_after: <ArrowLeftRight className="h-4 w-4" />,
+  list_ranking: <Trophy className="h-4 w-4" />,
+  progress_meter: <Gauge className="h-4 w-4" />,
+  quote_portrait: <Quote className="h-4 w-4" />,
+  phone_mockup: <Smartphone className="h-4 w-4" />,
+  photo_stack: <Images className="h-4 w-4" />,
+  map_card: <MapPin className="h-4 w-4" />,
+  headline_ticker: <Newspaper className="h-4 w-4" />,
 }
 
 const toggleBtn =
@@ -109,7 +143,11 @@ export default function StoryboardPage() {
   const [switchingMode, setSwitchingMode] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const explainerCost = costFor('ai_explainer_video')
+  const baseCost = costFor('ai_explainer_video')
+  // The §10.6 aspect-variant bundle multiplies the render charge.
+  const explainerCost = board?.aspect_variants
+    ? Math.ceil(baseCost * (board.aspect_variants_multiplier ?? 2.5))
+    : baseCost
   const canAffordRender = hasSubscription && credits >= explainerCost
 
   useEffect(() => {
@@ -243,6 +281,45 @@ export default function StoryboardPage() {
       await fetchBoard()
     } catch {
       alert('Failed to switch skin')
+    }
+  }
+
+  const handleToggleChapterChip = async () => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/chapter-chip`, { enabled: !(board?.chapter_chip ?? false) })
+      await fetchBoard()
+    } catch {
+      alert('Failed to toggle chapter chip')
+    }
+  }
+
+  const handleToggleAspectVariants = async () => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/aspect-variants`, { enabled: !(board?.aspect_variants ?? false) })
+      await fetchBoard()
+    } catch {
+      alert('Failed to toggle aspect variants')
+    }
+  }
+
+  const handleBrandLogo = async (file: File | null, removeLogo = false) => {
+    const fd = new FormData()
+    if (file) fd.append('logo', file)
+    if (removeLogo) fd.append('remove_logo', '1')
+    try {
+      await api.post(`/api/explainer/projects/${id}/brand`, fd)
+      await fetchBoard()
+    } catch {
+      alert('Failed to update brand logo')
+    }
+  }
+
+  const handleBrandColor = async (color: string) => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/brand`, { color })
+      await fetchBoard()
+    } catch {
+      alert('Failed to update brand color')
     }
   }
 
@@ -447,23 +524,34 @@ export default function StoryboardPage() {
         </div>
       )}
 
+      {/* Packaging (§10.3–10.7): brand kit, chapter chip, aspect variants. */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
+        <BrandControls board={board} onLogo={handleBrandLogo} onColor={handleBrandColor} />
+        <div className="flex flex-wrap items-center gap-2">
+          {board.composition_mode === 'hybrid' && (
+            <button onClick={handleToggleChapterChip} className={toggleBtn} title="Show a 02 / 06 chapter counter in the corner">
+              <BookMarked className={`h-4 w-4 ${board.chapter_chip ? 'text-primary' : 'text-ink3'}`} />
+              Chapter chip {board.chapter_chip ? 'On' : 'Off'}
+            </button>
+          )}
+          <button
+            onClick={handleToggleAspectVariants}
+            className={toggleBtn}
+            title={`Render 16:9 + 9:16 + 1:1 in one go (${board.aspect_variants_multiplier ?? 2.5}× credits)`}
+          >
+            <Columns2 className={`h-4 w-4 ${board.aspect_variants ? 'text-primary' : 'text-ink3'}`} />
+            All aspects {board.aspect_variants ? 'On' : 'Off'}
+          </button>
+        </div>
+      </div>
+
       <StatusBanner board={board} />
 
       {board.status === 'completed' && board.output_url && (
-        <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-black shadow-soft">
-          <video src={board.output_url} controls className="w-full" />
-          <div className="flex items-center justify-between bg-card p-3.5">
-            <span className="text-sm font-medium text-muted-foreground">Final render</span>
-            <a
-              href={board.output_url}
-              download
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
-            >
-              <Play className="h-4 w-4" /> Download MP4
-            </a>
-          </div>
-        </div>
+        <FinalRender board={board} />
       )}
+
+      {board.status !== 'analyzing' && <LintReport report={board.lint_report} />}
 
       {board.status === 'analyzing' ? (
         <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground">
@@ -536,6 +624,164 @@ function StatusBanner({ board }: { board: Storyboard }) {
     )
   }
   return null
+}
+
+/** Brand kit controls (§10.4): logo watermark upload + brand colour, with the
+ *  contrast notice when the colour was ignored. */
+function BrandControls({
+  board, onLogo, onColor,
+}: {
+  board: Storyboard
+  onLogo: (file: File | null, remove?: boolean) => void
+  onColor: (color: string) => void
+}) {
+  const logoRef = useRef<HTMLInputElement>(null)
+  const [color, setColor] = useState(board.brand?.color ?? '#ffffff')
+  useEffect(() => {
+    if (board.brand?.color) setColor(board.brand.color)
+  }, [board.brand?.color])
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <span className="text-sm text-muted-foreground">Brand:</span>
+      {board.brand?.logo_url ? (
+        <span className="inline-flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={board.brand.logo_url} alt="logo" className="h-7 max-w-24 rounded border border-border bg-inset object-contain p-0.5" />
+          <button onClick={() => onLogo(null, true)} className="text-xs text-ink3 hover:text-destructive" title="Remove logo">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </span>
+      ) : (
+        <button onClick={() => logoRef.current?.click()} className="text-sm font-semibold text-primary hover:underline">
+          + Logo watermark
+        </button>
+      )}
+      <input
+        ref={logoRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) onLogo(f)
+          e.target.value = ''
+        }}
+      />
+      <span className="inline-flex items-center gap-1.5">
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+          className="h-7 w-9 cursor-pointer rounded border border-border bg-card"
+          title="Brand colour (overrides the accent when readable)"
+        />
+        {color.toLowerCase() !== (board.brand?.color ?? '').toLowerCase() && (
+          <button onClick={() => onColor(color)} className="text-xs font-semibold text-primary hover:underline">
+            Apply
+          </button>
+        )}
+        {board.brand?.color && !board.brand?.color_applied && (
+          <span className="text-xs text-warn" title="The brand colour fails the 4.5:1 contrast check against this scheme's paper/ink, so the scheme accent is used instead.">
+            low contrast — ignored
+          </span>
+        )}
+      </span>
+    </div>
+  )
+}
+
+/** Final render block with the §10.6 aspect switcher + §10.7 SRT download. */
+function FinalRender({ board }: { board: Storyboard }) {
+  const videos = (board.output_videos ?? []).filter((v) => v.url)
+  const [aspect, setAspect] = useState(videos[0]?.aspect ?? board.aspect_ratio)
+  const current = videos.find((v) => v.aspect === aspect)?.url ?? board.output_url ?? undefined
+  return (
+    <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-black shadow-soft">
+      <video key={current} src={current} controls className="w-full" />
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3.5">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground">Final render</span>
+          {videos.length > 1 && (
+            <div className="inline-flex overflow-hidden rounded-lg border border-border">
+              {videos.map((v) => (
+                <button
+                  key={v.aspect}
+                  onClick={() => setAspect(v.aspect)}
+                  className={`px-2.5 py-1 text-xs font-semibold ${
+                    aspect === v.aspect ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-inset'
+                  }`}
+                >
+                  {v.label} {v.aspect}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {board.srt_url && (
+            <a
+              href={board.srt_url}
+              download
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-inset"
+            >
+              <Captions className="h-4 w-4" /> SRT
+            </a>
+          )}
+          <a
+            href={current}
+            download
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
+          >
+            <Play className="h-4 w-4" /> Download MP4
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Quality-gate report (§12): collapsible severity-chip summary of the
+ *  storyboard lint — informational only, it never blocks a render. */
+function LintReport({ report }: { report?: LintReportData | null }) {
+  const [open, setOpen] = useState(false)
+  if (!report || !report.items?.length) return null
+  const chip = (n: number, tone: string, label: string) =>
+    n > 0 ? (
+      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${tone}`}>
+        {n} {label}
+      </span>
+    ) : null
+  const toneFor = (s: LintItem['severity']) =>
+    s === 'error' ? 'text-destructive' : s === 'warn' ? 'text-warn' : 'text-muted-foreground'
+  return (
+    <div className="mb-6 rounded-2xl border border-border bg-card p-4 shadow-soft">
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-warn" />
+          <span className="text-sm font-semibold">Quality check</span>
+          {chip(report.counts.error, 'bg-destructive/10 text-destructive', 'error')}
+          {chip(report.counts.warn, 'bg-warn/10 text-warn', 'warning')}
+          {chip(report.counts.info, 'bg-inset text-muted-foreground', 'note')}
+        </div>
+        <span className="text-xs text-ink3">{open ? 'Hide' : 'Details'}</span>
+      </button>
+      {open && (
+        <ul className="mt-3 space-y-1.5 border-t border-border pt-3">
+          {report.items.map((item, i) => (
+            <li key={i} className="flex items-start gap-2 text-sm">
+              <span className={`mt-0.5 text-[10px] font-bold uppercase ${toneFor(item.severity)}`}>
+                {item.severity}
+              </span>
+              <span className="text-foreground">
+                {item.scene_id ? <span className="mr-1.5 font-mono text-xs text-ink3">{item.scene_id}</span> : null}
+                {item.message}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 function SceneCard({
@@ -688,9 +934,13 @@ function SlotCard({
     )
   }
 
-  // Structured data-card contents (versus / chart / pros-cons / icon grid):
-  // read-only summaries — the renderer animates these natively.
-  if (['versus', 'chart', 'proscons', 'icons'].includes(slot.content_type)) {
+  // Structured data-card contents (versus / chart / pros-cons / icon grid /
+  // timeline / steps / ranking / meter / map / headlines): read-only
+  // summaries — the renderer animates these natively, nothing to upload.
+  if ([
+    'versus', 'chart', 'proscons', 'icons',
+    'timeline_nodes', 'steps', 'ranking', 'meter', 'map', 'headlines',
+  ].includes(slot.content_type)) {
     const s = slot as Record<string, any>
     let summary: React.ReactNode = null
     if (slot.content_type === 'versus') {
@@ -723,11 +973,67 @@ function SlotCard({
           ))}
         </div>
       )
+    } else if (slot.content_type === 'timeline_nodes') {
+      summary = (
+        <div className="space-y-0.5 text-sm text-foreground">
+          {(s.nodes || []).map((n: any, i: number) => (
+            <div key={i} className="flex gap-1.5">
+              <span className="font-mono text-xs text-primary">{n.date}</span>
+              <span>{n.label}</span>
+            </div>
+          ))}
+        </div>
+      )
+    } else if (slot.content_type === 'ranking') {
+      summary = (
+        <div className="space-y-0.5 text-sm text-foreground">
+          {(s.items || []).map((it: any, i: number) => (
+            <div key={i} className="flex gap-1.5">
+              <span className="font-mono text-xs text-primary">#{(s.items || []).length - i}</span>
+              <span>{typeof it === 'string' ? it : it.label || it.text}</span>
+            </div>
+          ))}
+        </div>
+      )
+    } else if (slot.content_type === 'meter') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <span className="font-semibold text-primary">{s.value_pct}{s.unit || '%'}</span>
+          <span className="ml-1.5 text-muted-foreground">{s.label}</span>
+        </div>
+      )
+    } else if (slot.content_type === 'map') {
+      summary = (
+        <div className="text-sm text-foreground">
+          {(s.pins || []).map((p: any, i: number) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <MapPin className="h-3 w-3 text-primary" />
+              <span>{p.label}</span>
+              <span className="font-mono text-[10px] text-ink3">{p.lat}, {p.lon}</span>
+            </div>
+          ))}
+          {s.route ? <p className="mt-1 text-xs text-muted-foreground">Route arc between pins</p> : null}
+        </div>
+      )
+    } else if (slot.content_type === 'headlines') {
+      summary = (
+        <div className="space-y-1 text-sm text-foreground">
+          {(s.items || []).map((it: any, i: number) => (
+            <div key={i}>
+              “{it.text}”
+              {it.source ? <span className="ml-1.5 font-mono text-[10px] uppercase text-ink3">{it.source}</span> : null}
+            </div>
+          ))}
+        </div>
+      )
     } else {
+      // icons / steps: chips of labels.
       summary = (
         <div className="flex flex-wrap gap-1.5 text-xs text-foreground">
           {(s.items || []).map((it: any, i: number) => (
-            <span key={i} className="rounded bg-card px-1.5 py-0.5">{it.label || it.icon}</span>
+            <span key={i} className="rounded bg-card px-1.5 py-0.5">
+              {typeof it === 'string' ? it : it.label || it.icon}
+            </span>
           ))}
         </div>
       )
@@ -746,9 +1052,12 @@ function SlotCard({
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-xs font-semibold uppercase tracking-wide text-ink3">
           {slotKey} {slot.label ? `· ${slot.label}` : ''}
+          {slot.frame ? (
+            <span className="ml-1 rounded bg-inset px-1.5 py-0.5 text-[10px] text-ink3">{slot.frame}</span>
+          ) : null}
         </div>
         <div className="flex items-center gap-1 text-muted-foreground">
-          <Move className="h-3 w-3" />
+          <Move className="h-3 w-31" />
           <select
             value={slot.camera_move || ''}
             onChange={(e) => updateCameraMove(e.target.value)}
@@ -800,7 +1109,13 @@ function SlotCard({
         }}
       />
 
-      {!slot.asset?.url && slot.asset_request?.description && (
+      {!slot.asset?.url && slot.stock_query && (
+        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-primary">
+          <Film className="mt-0.5 h-3 w-3 shrink-0" />
+          Stock b-roll “{slot.stock_query}” is fetched automatically at render — upload only to override it.
+        </p>
+      )}
+      {!slot.asset?.url && !slot.stock_query && slot.asset_request?.description && (
         <p className="mt-2 flex items-start gap-1.5 text-[11px] text-ink3">
           <ImageIcon className="mt-0.5 h-3 w-3 shrink-0" />
           {slot.asset_request.description}
