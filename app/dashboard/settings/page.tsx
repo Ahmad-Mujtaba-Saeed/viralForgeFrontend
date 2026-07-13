@@ -17,6 +17,7 @@ import {
   KeyRound,
   Mic,
   Music,
+  Clapperboard,
 } from 'lucide-react'
 import { useAuth, useAppDispatch } from '@/hooks/useAuth'
 import { updateProfile, changePassword } from '@/store/authSlice'
@@ -92,6 +93,7 @@ const PROVIDER_META: Record<string, { label: string; desc: string; keyNoun: stri
   rapidapi: { label: 'RapidAPI', desc: 'youtube-info-download-api (poll-based download)', keyNoun: 'API key' },
   apify: { label: 'Apify', desc: 'truefetch/youtube-video-downloader actor', keyNoun: 'API token' },
   pixabay: { label: 'Pixabay', desc: 'Royalty-free background music API (free key)', keyNoun: 'API key' },
+  pexels: { label: 'Pexels', desc: 'Free stock footage API for explainer b-roll (free key)', keyNoun: 'API key' },
 }
 
 function hasActiveKey(credentials: CredentialGroups | undefined, provider: string): boolean {
@@ -764,6 +766,99 @@ function AdminMusic() {
   )
 }
 
+type StockState = {
+  pexels_configured: boolean
+  pixabay_configured: boolean
+  credentials: ApiKey[]
+}
+
+function AdminStockFootage() {
+  const [state, setState] = useState<StockState | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [keysBusy, setKeysBusy] = useState(false)
+  const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    api
+      .get('/api/admin/settings')
+      .then((res) => setState(res.data.stock))
+      .catch(() => setMsg({ kind: 'error', text: 'Failed to load stock footage settings.' }))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const applyCredentials = (credentials: CredentialGroups, successText: string) => {
+    const pexels = credentials?.pexels ?? []
+    setState((prev) => ({
+      pexels_configured: pexels.some((k) => k.is_active),
+      pixabay_configured: prev?.pixabay_configured ?? false,
+      credentials: pexels,
+    }))
+    setMsg({ kind: 'success', text: successText })
+  }
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.16 }}
+      className="mt-7 rounded-2xl border border-border bg-card p-6 shadow-soft"
+    >
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <Clapperboard className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-[16px] font-semibold text-foreground">Stock footage (Pexels)</h2>
+          <p className="text-xs text-muted-foreground">
+            Admin only — the explainer template fetches free b-roll clips for scenes the AI marks as
+            stock footage. Free key from pexels.com/api.
+          </p>
+        </div>
+      </div>
+
+      {msg && <Banner kind={msg.kind} text={msg.text} />}
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-ink3">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : !state ? (
+        <p className="py-4 text-sm text-ink3">Settings unavailable.</p>
+      ) : (
+        <div>
+          <span
+            className={cn(
+              'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+              state.pexels_configured ? 'bg-good/10 text-good' : 'bg-warn-soft text-warn'
+            )}
+          >
+            {state.pexels_configured
+              ? `${state.credentials.filter((k) => k.is_active).length} active key(s)`
+              : state.pixabay_configured
+                ? 'No Pexels keys — b-roll falls back to Pixabay video'
+                : 'No keys — stock b-roll slots render as placeholders'}
+          </span>
+
+          <ProviderKeyManager
+            provider="pexels"
+            keys={state.credentials}
+            busy={keysBusy}
+            setBusy={setKeysBusy}
+            onCredentials={applyCredentials}
+            onError={(text) => setMsg({ kind: 'error', text })}
+          />
+
+          <p className="mt-3 text-xs text-ink3">
+            Pexels is tried first (better footage); the Pixabay video API (same key pool as background
+            music) is the automatic fallback. Clips are cached in storage per search query, so a query
+            is only ever downloaded once. Capped at 3 stock clips per video.
+          </p>
+        </div>
+      )}
+    </motion.section>
+  )
+}
+
 export default function SettingsPage() {
   const { user, fetchCurrentUser } = useAuth()
   const dispatch = useAppDispatch()
@@ -981,6 +1076,7 @@ export default function SettingsPage() {
       {user?.is_admin && <AdminLanding />}
       {user?.is_admin && <AdminNarration />}
       {user?.is_admin && <AdminMusic />}
+      {user?.is_admin && <AdminStockFootage />}
       {user?.is_admin && <AdminIntegrations />}
     </div>
   )
