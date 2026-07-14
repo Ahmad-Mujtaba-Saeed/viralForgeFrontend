@@ -674,7 +674,7 @@ function AdminTemplates() {
                     <input
                       type="number"
                       min={1}
-                      max={50}
+                      max={1000}
                       value={costDrafts[type] ?? String(row.credit_cost)}
                       onChange={(e) => setCostDrafts((d) => ({ ...d, [type]: e.target.value }))}
                       onBlur={() => commitCost(type)}
