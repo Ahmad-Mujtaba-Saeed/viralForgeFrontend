@@ -8,6 +8,7 @@ import {
   uploadProjectVideo as uploadProjectVideoThunk,
   updateProject as updateProjectThunk,
   uploadProjectSettingFile as uploadProjectSettingFileThunk,
+  deleteProject as deleteProjectThunk,
   Project,
 } from '@/store/projectSlice'
 
@@ -65,6 +66,13 @@ export function useProject() {
     [dispatch]
   )
 
+  const deleteProject = useCallback(
+    async (projectId: number | string) => {
+      return await dispatch(deleteProjectThunk(projectId)).unwrap()
+    },
+    [dispatch]
+  )
+
   return {
     ...projectState,
     createProject,
@@ -74,5 +82,6 @@ export function useProject() {
     updateProject,
     fetchProjects,
     fetchProjectById,
+    deleteProject,
   }
 }

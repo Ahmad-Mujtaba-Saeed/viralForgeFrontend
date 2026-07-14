@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ReduxProvider } from '@/components/providers/ReduxProvider'
 import { AuthProvider } from '@/components/providers/AuthProvider'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const hankenGrotesk = Hanken_Grotesk({
@@ -63,6 +64,7 @@ export default function RootLayout({
               disableTransitionOnChange
             >
               {children}
+              <Toaster position="top-right" richColors />
             </ThemeProvider>
           </AuthProvider>
         </ReduxProvider>

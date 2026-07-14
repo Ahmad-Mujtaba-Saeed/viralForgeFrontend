@@ -2,10 +2,29 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Search, LayoutGrid, List, MoreVertical, Play, Download, Share2, Trash2, Plus } from 'lucide-react'
+import { Search, LayoutGrid, List, MoreVertical, Play, Download, Trash2, Plus, Loader2 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProject } from '@/hooks/useProject'
+import { useProjectsLiveProgress } from '@/hooks/useProjectsLiveProgress'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 interface VideoItem {
   id: number
@@ -14,28 +33,12 @@ interface VideoItem {
   thumbnail_path: string
   duration: string
   aspectRatio: string
-  width: number
-  height: number
+  aspectRatioValue: number
   date: string
   outputPath?: string | null
   status?: string | null
   templateType?: string | null
   formattedFileSize?: string | null
-}
-
-const TEMPLATE_ASPECT_RATIOS: Record<string, string> = {
-  yt_automation_short: '9:16',
-  youtube_short: '9:16',
-  tiktok: '9:16',
-  instagram_story: '9:16',
-  yt_automation_long: '16:9',
-  youtube_long: '16:9',
-  default: '16:9',
-}
-
-const getAspectRatioFromTemplateType = (templateType?: string) => {
-  if (!templateType) return TEMPLATE_ASPECT_RATIOS.default
-  return TEMPLATE_ASPECT_RATIOS[templateType] || TEMPLATE_ASPECT_RATIOS.default
 }
 
 const gradientFor = (seed: number) => {
@@ -63,9 +66,13 @@ const formatClipDuration = (seconds?: number | null) => {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+const aspectRatioValueFromLabel = (label: string) => {
+  const [width, height] = label.split(':').map(Number)
+  return width > 0 && height > 0 ? width / height : 16 / 9
+}
+
 const buildVideoItemFromProject = (project: any): VideoItem => {
-  const aspectRatio = getAspectRatioFromTemplateType(project.template_type)
-  const [width, height] = aspectRatio.split(':').map(Number)
+  const aspectRatio = project.aspect_ratio || '16:9'
   return {
     id: project.id,
     key: String(project.id),
@@ -73,8 +80,7 @@ const buildVideoItemFromProject = (project: any): VideoItem => {
     thumbnail_path: project.thumbnail_path,
     duration: project.formatted_duration || '0:00',
     aspectRatio,
-    width: project.width || width * 90,
-    height: project.height || height * 90,
+    aspectRatioValue: aspectRatioValueFromLabel(aspectRatio),
     date: formatProjectDate(project.completed_at || project.created_at),
     outputPath: project.output_path || project.video_path,
     status: project.status,
@@ -103,24 +109,15 @@ const buildVideoItemsFromProject = (project: any): VideoItem[] => {
   }))
 }
 
-const getAspectRatioValue = (video: VideoItem) => {
-  if (video.width && video.height) return video.width / video.height
-  const [width, height] = video.aspectRatio.split(':').map(Number)
-  return height > 0 ? width / height : 16 / 9
-}
-
-const isPortrait = (video: VideoItem) => getAspectRatioValue(video) < 1
-const getGridColsClass = (video: VideoItem) => (isPortrait(video) ? 'col-span-1' : 'col-span-1 lg:col-span-2')
-const getAspectRatioClass = (video: VideoItem) => (isPortrait(video) ? 'aspect-[9/16]' : 'aspect-video')
-
 const Thumb = ({ video, children }: { video: VideoItem; children?: React.ReactNode }) => (
   <div
-    className={cn('relative overflow-hidden', getAspectRatioClass(video))}
-    style={
-      video.thumbnail_path
+    className="relative w-full overflow-hidden"
+    style={{
+      aspectRatio: video.aspectRatioValue,
+      ...(video.thumbnail_path
         ? { backgroundImage: `url(${video.thumbnail_path})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-        : { background: gradientFor(video.id) }
-    }
+        : { background: gradientFor(video.id) }),
+    }}
   >
     {!video.thumbnail_path && (
       <div className="absolute inset-0 bg-[repeating-linear-gradient(125deg,rgba(255,255,255,.04),rgba(255,255,255,.04)_7px,transparent_7px,transparent_15px)]" />
@@ -129,18 +126,40 @@ const Thumb = ({ video, children }: { video: VideoItem; children?: React.ReactNo
   </div>
 )
 
+const VideoSkeletonGrid = () => (
+  <div className="columns-1 gap-5 sm:columns-2 lg:columns-4">
+    {Array.from({ length: 8 }).map((_, i) => (
+      <div key={i} className="mb-5 break-inside-avoid overflow-hidden rounded-2xl border border-border bg-card">
+        <Skeleton className={cn('w-full rounded-none', i % 3 === 0 ? 'h-64' : 'h-40')} />
+        <div className="space-y-2 p-4">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/3" />
+        </div>
+      </div>
+    ))}
+  </div>
+)
+
 function VideosPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   // The header search navigates here with ?q=… — seed the local box from it.
   const queryParam = searchParams.get('q') ?? ''
-  const { projects, isFetchingProjects, fetchProjectsError, fetchProjects } = useProject()
+  const { projects, isFetchingProjects, fetchProjectsError, fetchProjects, deleteProject } = useProject()
   const [isGridView, setIsGridView] = useState(true)
   const [searchQuery, setSearchQuery] = useState(queryParam)
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchProjects().catch(() => {})
   }, [fetchProjects])
+
+  const processingIds = useMemo(
+    () => projects.filter((p) => p.status === 'processing').map((p) => p.id),
+    [projects]
+  )
+  useProjectsLiveProgress(processingIds)
 
   // Keep the box in sync whenever the header sends a new query.
   useEffect(() => {
@@ -166,6 +185,21 @@ function VideosPageContent() {
     if (video.outputPath) window.open(video.outputPath, '_blank')
   }
 
+  const confirmDelete = async () => {
+    if (pendingDeleteId == null) return
+    const id = pendingDeleteId
+    setDeletingId(id)
+    try {
+      await deleteProject(id)
+      toast.success('Video deleted.')
+    } catch (err: any) {
+      toast.error(typeof err === 'string' ? err : 'Failed to delete video.')
+    } finally {
+      setDeletingId(null)
+      setPendingDeleteId(null)
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -188,7 +222,7 @@ function VideosPageContent() {
             <button
               onClick={() => setIsGridView(true)}
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors',
                 isGridView ? 'bg-primary text-primary-foreground' : 'text-ink3 hover:text-foreground'
               )}
             >
@@ -197,7 +231,7 @@ function VideosPageContent() {
             <button
               onClick={() => setIsGridView(false)}
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors',
                 !isGridView ? 'bg-primary text-primary-foreground' : 'text-ink3 hover:text-foreground'
               )}
             >
@@ -209,9 +243,7 @@ function VideosPageContent() {
 
       {/* States */}
       {isFetchingProjects && filteredVideos.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
-          Loading videos…
-        </div>
+        <VideoSkeletonGrid />
       ) : fetchProjectsError ? (
         <div className="rounded-2xl border border-accent-line bg-accent-soft p-6 text-sm text-primary">
           {fetchProjectsError}
@@ -225,23 +257,23 @@ function VideosPageContent() {
           <p className="mt-1 text-sm text-muted-foreground">Finished renders will appear here.</p>
           <button
             onClick={() => router.push('/dashboard/templates')}
-            className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground"
+            className="mt-5 inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground"
           >
             <Plus className="h-4 w-4" /> Create a video
           </button>
         </div>
       ) : isGridView ? (
-        <div className="grid auto-rows-max grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="columns-1 gap-5 sm:columns-2 lg:columns-4">
           {filteredVideos.map((video, index) => (
             <motion.div
               key={video.key}
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.04 }}
-              className={getGridColsClass(video)}
+              className="mb-5 break-inside-avoid"
             >
-              <div className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft transition-transform hover:-translate-y-0.5">
-                <button onClick={() => openVideo(video)} className="block w-full text-left">
+              <div className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft transition-transform hover:-translate-y-0.5">
+                <button onClick={() => openVideo(video)} className="block w-full cursor-pointer text-left">
                   <Thumb video={video}>
                     <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/40">
                       <Play className="h-12 w-12 fill-white text-white opacity-0 transition-opacity group-hover:opacity-100" />
@@ -265,13 +297,33 @@ function VideosPageContent() {
                     <button
                       disabled={!video.outputPath}
                       onClick={() => openVideo(video)}
-                      className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground disabled:opacity-50"
+                      className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Download className="h-3.5 w-3.5" /> Download
                     </button>
-                    <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground">
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground">
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          disabled={!video.outputPath}
+                          onSelect={() => openVideo(video)}
+                          className="cursor-pointer"
+                        >
+                          <Download className="h-3.5 w-3.5" /> Download
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          className="cursor-pointer"
+                          onSelect={() => setPendingDeleteId(video.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </div>
@@ -288,7 +340,7 @@ function VideosPageContent() {
               transition={{ duration: 0.3, delay: index * 0.04 }}
               className="group flex gap-4 rounded-2xl border border-border bg-card p-3.5 shadow-soft transition-colors hover:bg-inset"
             >
-              <button onClick={() => openVideo(video)} className="w-28 flex-shrink-0 overflow-hidden rounded-xl sm:w-36">
+              <button onClick={() => openVideo(video)} className="w-28 flex-shrink-0 cursor-pointer overflow-hidden rounded-xl sm:w-36">
                 <Thumb video={video}>
                   <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/40">
                     <Play className="h-7 w-7 fill-white text-white opacity-0 transition-opacity group-hover:opacity-100" />
@@ -314,15 +366,16 @@ function VideosPageContent() {
                 <button
                   disabled={!video.outputPath}
                   onClick={() => openVideo(video)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-50"
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   title="Download"
                 >
                   <Download className="h-4 w-4" />
                 </button>
-                <button className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-foreground" title="Share">
-                  <Share2 className="h-4 w-4" />
-                </button>
-                <button className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-destructive" title="Delete">
+                <button
+                  onClick={() => setPendingDeleteId(video.id)}
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-destructive"
+                  title="Delete"
+                >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -330,19 +383,39 @@ function VideosPageContent() {
           ))}
         </div>
       )}
+
+      <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the project and its rendered output. This can&apos;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="cursor-pointer" disabled={deletingId !== null}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingId !== null}
+              onClick={(e) => {
+                e.preventDefault()
+                confirmDelete()
+              }}
+            >
+              {deletingId !== null ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
 
 export default function VideosPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
-          Loading videos…
-        </div>
-      }
-    >
+    <Suspense fallback={<VideoSkeletonGrid />}>
       <VideosPageContent />
     </Suspense>
   )

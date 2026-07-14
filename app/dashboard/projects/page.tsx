@@ -1,12 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { RefreshCcw, Play, AlertCircle, Plus, ArrowRight } from 'lucide-react'
+import { RefreshCcw, Play, AlertCircle, Plus, ArrowRight, Trash2, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { retryProject } from '@/store/projectSlice'
 import { useProject } from '@/hooks/useProject'
 import { useAppDispatch } from '@/hooks/useAuth'
+import { useProjectsLiveProgress } from '@/hooks/useProjectsLiveProgress'
+import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 const statusBadge = (status?: string): { label: string; cls: string } => {
   switch (status) {
@@ -36,16 +50,53 @@ const gradientFor = (seed: number) => {
 const prettyTemplate = (t?: string) =>
   (t || 'Project').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
+const ProjectsSkeletonGrid = () => (
+  <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    {Array.from({ length: 8 }).map((_, i) => (
+      <div key={i} className="overflow-hidden rounded-2xl border border-border bg-card">
+        <Skeleton className={cn('w-full rounded-none', i % 2 === 0 ? 'aspect-video' : 'aspect-[9/16]')} />
+        <div className="space-y-2 p-4">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      </div>
+    ))}
+  </div>
+)
+
 export default function ProjectsPage() {
   const router = useRouter()
   const dispatch = useAppDispatch()
-  const { projects, isFetchingProjects, fetchProjectsError, fetchProjects } = useProject()
+  const { projects, isFetchingProjects, fetchProjectsError, fetchProjects, deleteProject } = useProject()
   const [retryingId, setRetryingId] = useState<number | null>(null)
   const [retryErrors, setRetryErrors] = useState<Record<number, string>>({})
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchProjects().catch(() => {})
   }, [fetchProjects])
+
+  const processingIds = useMemo(
+    () => projects.filter((p) => p.status === 'processing').map((p) => p.id),
+    [projects]
+  )
+  useProjectsLiveProgress(processingIds)
+
+  const confirmDelete = async () => {
+    if (pendingDeleteId == null) return
+    const id = pendingDeleteId
+    setDeletingId(id)
+    try {
+      await deleteProject(id)
+      toast.success('Project deleted.')
+    } catch (err: any) {
+      toast.error(typeof err === 'string' ? err : 'Failed to delete project.')
+    } finally {
+      setDeletingId(null)
+      setPendingDeleteId(null)
+    }
+  }
 
   const openProject = (project: { id: number; template_type?: string }) => {
     if (project.template_type === 'ai_explainer_video') {
@@ -109,9 +160,7 @@ export default function ProjectsPage() {
       )}
 
       {isFetchingProjects && projects.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
-          Loading projects…
-        </div>
+        <ProjectsSkeletonGrid />
       ) : projects.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-12 text-center">
           <p className="text-sm text-muted-foreground">No projects yet. Start from a template.</p>
@@ -123,25 +172,26 @@ export default function ProjectsPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {projects.map((project) => {
             const badge = statusBadge(project.status)
             const isFailed = project.status === 'failed'
+            const aspectRatio = (project.aspect_ratio || '16:9').replace(':', '/')
             return (
               <motion.div
                 key={project.id}
                 whileHover={{ y: -2 }}
-                className="group overflow-hidden rounded-2xl border border-border bg-card shadow-soft"
+                className="group relative overflow-hidden rounded-2xl border border-border bg-card shadow-soft"
               >
                 <button
                   type="button"
                   onClick={() => openProject(project)}
                   disabled={isFailed}
-                  className="block w-full text-left disabled:cursor-default"
+                  className="block w-full cursor-pointer text-left disabled:cursor-default"
                 >
                   <div
-                    className="relative flex aspect-[16/10] items-center justify-center overflow-hidden"
-                    style={{ background: gradientFor(project.id) }}
+                    className="relative flex w-full items-center justify-center overflow-hidden"
+                    style={{ background: gradientFor(project.id), aspectRatio }}
                   >
                     {project.thumbnail_path ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -158,7 +208,7 @@ export default function ProjectsPage() {
                         <Play className="ml-0.5 h-4 w-4 fill-white text-white" />
                       </span>
                     )}
-                    <span className={`absolute right-2.5 top-2.5 rounded-md px-2 py-0.5 text-[10.5px] font-bold ${badge.cls}`}>
+                    <span className={`absolute left-2.5 top-2.5 rounded-md px-2 py-0.5 text-[10.5px] font-bold ${badge.cls}`}>
                       {badge.label}
                     </span>
                     {project.status === 'processing' && (
@@ -183,6 +233,15 @@ export default function ProjectsPage() {
                       <span>ID {project.id}</span>
                     </div>
                   </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPendingDeleteId(project.id)}
+                  className="absolute right-2.5 top-2.5 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md bg-black/40 text-white opacity-0 backdrop-blur transition-opacity hover:bg-black/60 group-hover:opacity-100"
+                  title="Delete project"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
 
                 {isFailed && (
@@ -219,6 +278,32 @@ export default function ProjectsPage() {
           })}
         </div>
       )}
+
+      <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the project and any rendered output. This can&apos;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="cursor-pointer" disabled={deletingId !== null}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingId !== null}
+              onClick={(e) => {
+                e.preventDefault()
+                confirmDelete()
+              }}
+            >
+              {deletingId !== null ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

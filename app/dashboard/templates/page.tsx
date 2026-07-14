@@ -22,6 +22,9 @@ type TemplateCard = {
   isPremium: boolean
   isNew: boolean
   category: "short" | "long"
+  enabled: boolean
+  creditCost?: number
+  trending: boolean
 }
 
 const itemVariants = {
@@ -59,6 +62,9 @@ export default function TemplatesPage() {
     isPremium: template.isPremium ?? false,
     isNew: template.isNew ?? false,
     category: template.category ?? (template.aspect_ratio === "9:16" ? "short" : "long"),
+    enabled: template.enabled ?? true,
+    creditCost: template.credit_cost,
+    trending: template.trending ?? false,
   }))
 
   const filteredTemplates = enrichedTemplates.filter((template) => {
@@ -74,7 +80,7 @@ export default function TemplatesPage() {
     return matchesDuration && matchesSearch
   })
 
-  const featured = enrichedTemplates[0]
+  const featured = enrichedTemplates.find((t) => t.trending) ?? enrichedTemplates[0]
 
   const toggleFavorite = (templateType: string) => {
     setFavorites((prev) =>
@@ -83,7 +89,7 @@ export default function TemplatesPage() {
   }
 
   const handleUseTemplate = async (template: TemplateCard) => {
-    if (isCreating) return
+    if (isCreating || !template.enabled) return
 
     // The AI Explainer template has its own script -> storyboard -> render flow.
     if (template.templateType === "ai_explainer_video") {
@@ -172,9 +178,21 @@ export default function TemplatesPage() {
               style={{ background: "radial-gradient(circle, rgba(232,73,43,.5), transparent 70%)" }}
             />
             <div className="relative">
-              <span className="inline-block rounded-full bg-white/12 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
-                Trending now
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="inline-block rounded-full bg-white/12 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
+                  Trending now
+                </span>
+                {typeof featured.creditCost === "number" && (
+                  <span className="inline-block rounded-full bg-white/12 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
+                    {featured.creditCost} credits
+                  </span>
+                )}
+                {!featured.enabled && (
+                  <span className="inline-block rounded-full bg-black/40 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white/80">
+                    Unavailable
+                  </span>
+                )}
+              </div>
               <h2 className="font-display mt-4 max-w-[380px] text-[30px] font-bold leading-[1.1] tracking-tight text-white">
                 {featured.name}
               </h2>
@@ -182,10 +200,10 @@ export default function TemplatesPage() {
             </div>
             <button
               onClick={() => handleUseTemplate(featured)}
-              disabled={isCreating}
-              className="relative mt-5 inline-flex h-[42px] w-fit items-center gap-2 rounded-xl bg-primary px-5 text-[13.5px] font-bold text-white disabled:opacity-60"
+              disabled={isCreating || !featured.enabled}
+              className="relative mt-5 inline-flex h-[42px] w-fit cursor-pointer items-center gap-2 rounded-xl bg-primary px-5 text-[13.5px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isCreating ? "Creating…" : "Start with this"}
+              {isCreating ? "Creating…" : !featured.enabled ? "Unavailable" : "Start with this"}
               <ArrowRight className="h-[15px] w-[15px]" />
             </button>
           </div>
@@ -262,26 +280,44 @@ export default function TemplatesPage() {
             const pal = paletteFor(i)
             const isFav = favorites.includes(template.templateType)
             return (
-              <motion.div key={template.templateType} variants={itemVariants} layout className="group">
+              <motion.div
+                key={template.templateType}
+                variants={itemVariants}
+                layout
+                className={cn("group", !template.enabled && "opacity-60")}
+              >
                 <div className="relative aspect-[16/11] overflow-hidden rounded-2xl" style={{ background: pal.bg }}>
                   <div className="absolute inset-0">
                     <TemplateArt kind={artKindFor(template.templateType)} accent={pal.a} />
                   </div>
-                  <span className="absolute left-2.5 top-2.5 rounded-md bg-black/30 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white backdrop-blur">
-                    {template.aspect_ratio ?? "16:9"}
-                  </span>
-                  {template.isPremium && (
-                    <span className="absolute right-2.5 top-2.5 rounded-md bg-primary px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
-                      PRO
+                  {template.enabled ? (
+                    <span className="absolute left-2.5 top-2.5 rounded-md bg-black/30 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white backdrop-blur">
+                      {template.aspect_ratio ?? "16:9"}
+                    </span>
+                  ) : (
+                    <span className="absolute left-2.5 top-2.5 rounded-md bg-black/50 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white backdrop-blur">
+                      Unavailable
                     </span>
                   )}
+                  <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
+                    {typeof template.creditCost === "number" && (
+                      <span className="rounded-md bg-black/30 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white backdrop-blur">
+                        {template.creditCost} cr
+                      </span>
+                    )}
+                    {template.isPremium && (
+                      <span className="rounded-md bg-primary px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
+                        PRO
+                      </span>
+                    )}
+                  </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
                       toggleFavorite(template.templateType)
                     }}
                     className={cn(
-                      "absolute bottom-2.5 right-2.5 rounded-md bg-black/30 p-1.5 backdrop-blur transition-opacity",
+                      "absolute bottom-2.5 right-2.5 cursor-pointer rounded-md bg-black/30 p-1.5 backdrop-blur transition-opacity",
                       isFav ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                     )}
                   >
@@ -292,11 +328,11 @@ export default function TemplatesPage() {
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 backdrop-blur-[1px] transition-opacity group-hover:opacity-100">
                     <button
                       onClick={() => handleUseTemplate(template)}
-                      disabled={isCreating}
-                      className="inline-flex h-[38px] items-center gap-1.5 rounded-lg bg-white px-4 text-[13px] font-bold text-[#1A1916] disabled:opacity-70"
+                      disabled={isCreating || !template.enabled}
+                      className="inline-flex h-[38px] cursor-pointer items-center gap-1.5 rounded-lg bg-white px-4 text-[13px] font-bold text-[#1A1916] disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <Play className="h-3.5 w-3.5 fill-[#1A1916]" />
-                      {isCreating ? "Creating…" : "Use template"}
+                      {isCreating ? "Creating…" : !template.enabled ? "Unavailable" : "Use template"}
                     </button>
                   </div>
                 </div>

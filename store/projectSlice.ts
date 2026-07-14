@@ -26,6 +26,7 @@ export interface Project {
   file_type?: string | null
   file_size?: number | null
   duration?: number | null
+  aspect_ratio?: string | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -208,6 +209,20 @@ export const retryProject = createAsyncThunk(
   }
 )
 
+export const deleteProject = createAsyncThunk(
+  'project/delete',
+  async (projectId: number | string, { rejectWithValue }) => {
+    try {
+      await api.delete(`/api/projects/${projectId}`)
+      return projectId
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.message || error.message || 'Failed to delete project'
+      )
+    }
+  }
+)
+
 const projectSlice = createSlice({
   name: 'project',
   initialState,
@@ -224,6 +239,14 @@ const projectSlice = createSlice({
     updateCurrentProject: (state, action: PayloadAction<Partial<Project>>) => {
       if (!state.currentProject) return
       state.currentProject = { ...state.currentProject, ...action.payload }
+    },
+    // Merge partial updates into a matching entry of the projects list (used for realtime list-page progress)
+    updateProjectInList: (state, action: PayloadAction<{ id: number | string } & Partial<Omit<Project, 'id'>>>) => {
+      const { id, ...changes } = action.payload
+      const index = state.projects.findIndex((p) => String(p.id) === String(id))
+      if (index !== -1) {
+        state.projects[index] = { ...state.projects[index], ...changes }
+      }
     },
   },
   extraReducers: (builder) => {
@@ -345,8 +368,19 @@ const projectSlice = createSlice({
         state.isProcessing = false
         state.error = action.payload as string
       })
+
+    builder
+      .addCase(deleteProject.fulfilled, (state, action) => {
+        state.projects = state.projects.filter((p) => String(p.id) !== String(action.payload))
+        if (state.currentProject && String(state.currentProject.id) === String(action.payload)) {
+          state.currentProject = null
+        }
+      })
+      .addCase(deleteProject.rejected, (state, action) => {
+        state.error = action.payload as string
+      })
   },
 })
 
-export const { clearProject, updateCurrentProject } = projectSlice.actions
+export const { clearProject, updateCurrentProject, updateProjectInList } = projectSlice.actions
 export default projectSlice.reducer

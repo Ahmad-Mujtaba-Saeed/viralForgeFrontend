@@ -28,6 +28,7 @@ import {
   LINKS,
   yearlyPrice,
   type Tier,
+  type Template,
 } from "@/components/landing/shared/content"
 import { TemplateArt, artKindFor, paletteFor } from "@/components/dashboard/template-art"
 import { useLandingAuth } from "@/components/landing/shared/useLandingAuth"
@@ -347,18 +348,18 @@ function StatsStrip() {
 }
 
 /* ----------------------------- Templates ------------------------------- */
-function Templates() {
+function Templates({ templates }: { templates: Template[] }) {
   return (
     <section id="templates" className="py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <SectionHead
           eyebrow="What you can make"
-          title="Six ways to go"
+          title={`${templates.length} ways to go`}
           accent="viral."
           sub="Every template is a full pipeline — script, voiceover, captions and music included. Pick one and go."
         />
         <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {TEMPLATES.map((t, i) => {
+          {templates.map((t, i) => {
             const pal = paletteFor(i)
             return (
               <motion.div
@@ -677,13 +678,13 @@ function Footer() {
   )
 }
 
-export default function LandingEditorial() {
+export default function LandingEditorial({ templates = TEMPLATES }: { templates?: Template[] }) {
   return (
     <main className="min-h-screen bg-[#FBFAF8] font-sans text-[#1A1916] antialiased">
       <Navbar />
       <Hero />
       <StatsStrip />
-      <Templates />
+      <Templates templates={templates} />
       <HowItWorks />
       <Features />
       <Testimonials />

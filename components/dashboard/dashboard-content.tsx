@@ -13,7 +13,9 @@ import {
   Play,
 } from "lucide-react"
 import { useProject } from "@/hooks/useProject"
+import { useProjectsLiveProgress } from "@/hooks/useProjectsLiveProgress"
 import type { Project } from "@/store/projectSlice"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const quickStarts = [
   {
@@ -108,6 +110,9 @@ export function DashboardContent() {
   const draftCount = sorted.filter(
     (p) => !["processing", "completed"].includes(p.status)
   ).length
+
+  const renderingIds = useMemo(() => (rendering ? [rendering.id] : []), [rendering?.id])
+  useProjectsLiveProgress(renderingIds)
 
   const open = (id: number) => router.push(`/dashboard/create?projectId=${id}`)
 
@@ -222,8 +227,16 @@ export function DashboardContent() {
         </div>
 
         {isFetchingProjects && recent.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-            Loading projects…
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i}>
+                <Skeleton className="aspect-[4/3] w-full rounded-2xl" />
+                <div className="space-y-1.5 px-0.5 pt-2.5">
+                  <Skeleton className="h-3.5 w-4/5" />
+                  <Skeleton className="h-3 w-2/5" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : recent.length === 0 ? (
           <div className="rounded-2xl border border-border bg-card p-10 text-center">
@@ -243,7 +256,7 @@ export function DashboardContent() {
                 <button
                   key={p.id}
                   onClick={() => open(p.id)}
-                  className="group text-left"
+                  className="group cursor-pointer text-left"
                 >
                   <div
                     className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl"

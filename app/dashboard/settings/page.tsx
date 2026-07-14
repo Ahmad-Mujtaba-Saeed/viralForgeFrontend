@@ -18,6 +18,9 @@ import {
   Mic,
   Music,
   Clapperboard,
+  LayoutGrid,
+  Flame,
+  Ban,
 } from 'lucide-react'
 import { useAuth, useAppDispatch } from '@/hooks/useAuth'
 import { updateProfile, changePassword } from '@/store/authSlice'
@@ -537,6 +540,179 @@ function AdminLanding() {
             })}
           </div>
           <p className="mt-3 text-xs text-ink3">Changes go live immediately on the public homepage — refresh to see them.</p>
+        </div>
+      )}
+    </motion.section>
+  )
+}
+
+type TemplateSettingRow = {
+  name: string
+  description: string
+  icon: string
+  enabled: boolean
+  credit_cost: number
+  trending: boolean
+}
+
+type TemplatesState = Record<string, TemplateSettingRow>
+
+function AdminTemplates() {
+  const [state, setState] = useState<TemplatesState | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [costDrafts, setCostDrafts] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    api
+      .get('/api/admin/settings')
+      .then((res) => {
+        setState(res.data.templates)
+        const drafts: Record<string, string> = {}
+        Object.entries(res.data.templates ?? {}).forEach(([type, row]) => {
+          drafts[type] = String((row as TemplateSettingRow).credit_cost)
+        })
+        setCostDrafts(drafts)
+      })
+      .catch(() => setMsg({ kind: 'error', text: 'Failed to load template settings.' }))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const save = async (templateType: string, fields: Partial<Pick<TemplateSettingRow, 'enabled' | 'credit_cost' | 'trending'>>) => {
+    setMsg(null)
+    setSaving(templateType)
+    try {
+      const res = await api.put('/api/admin/settings', {
+        templates: { [templateType]: fields },
+      })
+      setState(res.data.templates)
+      setMsg({ kind: 'success', text: `Updated “${res.data.templates?.[templateType]?.name ?? templateType}”.` })
+    } catch {
+      setMsg({ kind: 'error', text: 'Failed to update template settings.' })
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const toggleEnabled = (templateType: string, enabled: boolean) => {
+    if (saving) return
+    save(templateType, { enabled })
+  }
+
+  const toggleTrending = (templateType: string, trending: boolean) => {
+    if (saving) return
+    save(templateType, { trending })
+  }
+
+  const commitCost = (templateType: string) => {
+    const draft = Number(costDrafts[templateType])
+    const current = state?.[templateType]?.credit_cost
+    if (!Number.isFinite(draft) || draft === current || saving) return
+    save(templateType, { credit_cost: Math.round(draft) })
+  }
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 }}
+      className="mt-7 rounded-2xl border border-border bg-card p-6 shadow-soft"
+    >
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <LayoutGrid className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-[16px] font-semibold text-foreground">Templates</h2>
+          <p className="text-xs text-muted-foreground">
+            Admin only — enable/disable templates, set credit cost, and pin the "Trending now" template.
+          </p>
+        </div>
+      </div>
+
+      {msg && <Banner kind={msg.kind} text={msg.text} />}
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-ink3">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : !state ? (
+        <p className="py-4 text-sm text-ink3">Settings unavailable.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {Object.entries(state).map(([type, row]) => {
+            const rowSaving = saving === type
+            return (
+              <div
+                key={type}
+                className={cn(
+                  'flex flex-col gap-3 rounded-xl border p-3.5 transition-colors sm:flex-row sm:items-center sm:justify-between',
+                  row.enabled ? 'border-border bg-card' : 'border-border/60 bg-inset/50 opacity-70'
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-foreground">{row.name}</span>
+                    {row.trending && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                        <Flame className="h-3 w-3" /> Trending
+                      </span>
+                    )}
+                    {!row.enabled && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[10.5px] font-bold text-warn">
+                        <Ban className="h-3 w-3" /> Disabled
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 line-clamp-1 text-xs text-ink3">{row.description}</p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-ink3">
+                    Credits
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={costDrafts[type] ?? String(row.credit_cost)}
+                      onChange={(e) => setCostDrafts((d) => ({ ...d, [type]: e.target.value }))}
+                      onBlur={() => commitCost(type)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+                      disabled={rowSaving}
+                      className="h-8 w-16 cursor-text rounded-lg border border-border bg-card px-2 text-center text-sm text-foreground outline-none focus:border-primary disabled:opacity-60"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleTrending(type, !row.trending)}
+                    disabled={rowSaving}
+                    className={cn(
+                      'inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                      row.trending
+                        ? 'border-primary bg-accent-soft text-primary'
+                        : 'border-border bg-card text-muted-foreground hover:border-primary/50'
+                    )}
+                  >
+                    Trending
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleEnabled(type, !row.enabled)}
+                    disabled={rowSaving}
+                    className={cn(
+                      'inline-flex h-8 w-24 cursor-pointer items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                      row.enabled ? 'bg-good/15 text-good' : 'bg-warn-soft text-warn'
+                    )}
+                  >
+                    {rowSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : row.enabled ? 'Enabled' : 'Disabled'}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </motion.section>
@@ -1073,6 +1249,7 @@ export default function SettingsPage() {
       </motion.section>
 
       {/* Admin-only settings */}
+      {user?.is_admin && <AdminTemplates />}
       {user?.is_admin && <AdminLanding />}
       {user?.is_admin && <AdminNarration />}
       {user?.is_admin && <AdminMusic />}

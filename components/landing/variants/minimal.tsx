@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { ArrowRight, Check, Flame, Menu, X, Zap, ArrowUpRight } from "lucide-react"
+import { ArrowRight, Check, Flame, Menu, X, Zap, ArrowUpRight, Wand2 } from "lucide-react"
 import { useLandingAuth } from "@/components/landing/shared/useLandingAuth"
 import {
   TEMPLATES,
@@ -15,8 +15,12 @@ import {
   STATS,
   LINKS,
   yearlyPrice,
+  TEMPLATE_ICONS_BY_SLUG,
   type Tier,
+  type Template,
 } from "@/components/landing/shared/content"
+
+const iconFor = (slug: string) => TEMPLATE_ICONS_BY_SLUG[slug] ?? Wand2
 
 /* Minimal, clean SaaS palette — neutral + a single restrained accent. */
 const rise = {
@@ -59,7 +63,9 @@ function AppMock() {
         <div>
           <div className="text-[12px] font-semibold uppercase tracking-wide text-[#A1A1AA]">Template</div>
           <div className="mt-2 space-y-2">
-            {TEMPLATES.slice(0, 3).map((t, i) => (
+            {TEMPLATES.slice(0, 3).map((t, i) => {
+              const Icon = iconFor(t.icon)
+              return (
               <div
                 key={t.key}
                 className={`flex items-center gap-3 rounded-xl border p-3 ${
@@ -71,7 +77,7 @@ function AppMock() {
                     i === 0 ? "bg-[#E8492B] text-white" : "bg-[#F4F4F5] text-[#52525B]"
                   }`}
                 >
-                  <t.icon className="h-[18px] w-[18px]" />
+                  <Icon className="h-[18px] w-[18px]" />
                 </span>
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-semibold text-[#18181B]">{t.name}</div>
@@ -79,7 +85,8 @@ function AppMock() {
                 </div>
                 {i === 0 && <Check className="ml-auto h-4 w-4 text-[#E8492B]" />}
               </div>
-            ))}
+              )
+            })}
           </div>
           <div className="mt-4 flex items-center justify-between rounded-xl bg-[#18181B] px-4 py-3">
             <span className="text-[13px] font-semibold text-white">Generate video</span>
@@ -262,17 +269,19 @@ function StatsStrip() {
 }
 
 /* ----------------------------- Templates ------------------------------- */
-function Templates() {
+function Templates({ templates }: { templates: Template[] }) {
   return (
     <section id="templates" className="py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <SectionHead
           eyebrow="Templates"
-          title="Six ways to make a video"
+          title={`${templates.length} ways to make a video`}
           sub="Each one is a full pipeline — script, voiceover, captions and music included."
         />
         <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-[#E4E4E7] bg-[#E4E4E7] sm:grid-cols-2 lg:grid-cols-3">
-          {TEMPLATES.map((t) => (
+          {templates.map((t) => {
+            const Icon = iconFor(t.icon)
+            return (
             <motion.div
               key={t.key}
               variants={rise}
@@ -283,7 +292,7 @@ function Templates() {
             >
               <div className="flex items-center justify-between">
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#18181B] transition-colors group-hover:bg-[#FCEDE8] group-hover:text-[#E8492B]">
-                  <t.icon className="h-[22px] w-[22px]" />
+                  <Icon className="h-[22px] w-[22px]" />
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-md bg-[#F4F4F5] px-2 py-1 text-[11.5px] font-semibold text-[#52525B]">
                   <Zap className="h-3 w-3" />
@@ -296,7 +305,8 @@ function Templates() {
                 Use template <ArrowUpRight className="h-3.5 w-3.5" />
               </span>
             </motion.div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </section>
@@ -546,13 +556,13 @@ function Footer() {
   )
 }
 
-export default function LandingMinimal() {
+export default function LandingMinimal({ templates = TEMPLATES }: { templates?: Template[] }) {
   return (
     <main className="min-h-screen bg-white font-sans text-[#18181B] antialiased">
       <Navbar />
       <Hero />
       <StatsStrip />
-      <Templates />
+      <Templates templates={templates} />
       <HowItWorks />
       <Features />
       <Testimonials />

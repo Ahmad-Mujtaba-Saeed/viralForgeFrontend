@@ -1,11 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
-import Pusher from 'pusher-js'
-
-interface PusherConfig {
-  key: string
-  cluster: string
-  useTLS?: boolean
-}
+import { subscribeToChannel, unsubscribeFromChannel, getChannel } from '@/lib/pusherClient'
 
 interface ProgressUpdate {
   progress: number
@@ -41,70 +35,51 @@ interface ErrorUpdate {
 
 export type PusherEventListener = (data: any) => void
 
-export function usePusher(config: PusherConfig) {
-  const pusherRef = useRef<Pusher | null>(null)
-  const channelsRef = useRef<Map<string, any>>(new Map())
+/**
+ * Thin wrapper around the shared Pusher singleton (lib/pusherClient.ts).
+ * Subscriptions are ref-counted there, so multiple hook instances (e.g. a
+ * list page tracking several in-progress projects) can safely share one
+ * WebSocket connection.
+ */
+export function usePusher() {
+  const subscribedChannelsRef = useRef<Set<string>>(new Set())
 
-  // Initialize Pusher
   useEffect(() => {
-    if (!pusherRef.current) {
-      pusherRef.current = new Pusher(config.key, {
-        cluster: config.cluster,
-        useTLS: config.useTLS !== false,
-        encrypted: true,
-      })
-    }
-
+    const subscribed = subscribedChannelsRef.current
     return () => {
-      // Don't disconnect on unmount as we might want to keep the connection
-      // pusherRef.current?.disconnect()
-    }
-  }, [config.key, config.cluster, config.useTLS])
-
-  // Subscribe to a channel
-  const subscribe = useCallback(
-    (channelName: string) => {
-      if (!pusherRef.current) return null
-
-      if (!channelsRef.current.has(channelName)) {
-        const channel = pusherRef.current.subscribe(channelName)
-        channelsRef.current.set(channelName, channel)
-      }
-
-      return channelsRef.current.get(channelName)
-    },
-    []
-  )
-
-  // Unsubscribe from a channel
-  const unsubscribe = useCallback((channelName: string) => {
-    if (pusherRef.current && channelsRef.current.has(channelName)) {
-      pusherRef.current.unsubscribe(channelName)
-      channelsRef.current.delete(channelName)
+      subscribed.forEach((channelName) => unsubscribeFromChannel(channelName))
+      subscribed.clear()
     }
   }, [])
 
-  // Bind event listener to a channel
+  const subscribe = useCallback((channelName: string) => {
+    const channel = subscribeToChannel(channelName)
+    if (channel) subscribedChannelsRef.current.add(channelName)
+    return channel
+  }, [])
+
+  const unsubscribe = useCallback((channelName: string) => {
+    if (subscribedChannelsRef.current.has(channelName)) {
+      unsubscribeFromChannel(channelName)
+      subscribedChannelsRef.current.delete(channelName)
+    }
+  }, [])
+
   const bindEvent = useCallback(
     (channelName: string, eventName: string, listener: PusherEventListener) => {
       const channel = subscribe(channelName)
-      if (channel) {
-        channel.bind(eventName, listener)
-      }
+      channel?.bind(eventName, listener)
     },
     [subscribe]
   )
 
-  // Unbind event listener from a channel
   const unbindEvent = useCallback(
     (channelName: string, eventName: string, listener?: PusherEventListener) => {
-      const channel = channelsRef.current.get(channelName)
-      if (channel) {
-        if (listener) {
-          channel.unbind(eventName, listener)
-        } else {
-          channel.unbind(eventName)
-        }
+      const channel = getChannel(channelName)
+      if (listener) {
+        channel?.unbind(eventName, listener)
+      } else {
+        channel?.unbind(eventName)
       }
     },
     []
@@ -119,13 +94,10 @@ export function usePusher(config: PusherConfig) {
 }
 
 /**
- * Hook to listen to project progress updates from Pusher
+ * Hook to listen to project progress updates from Pusher.
  */
 export function useProjectProgress(projectId: number | string | null) {
-  const pusher = usePusher({
-    key: process.env.NEXT_PUBLIC_PUSHER_APP_KEY || '',
-    cluster: process.env.NEXT_PUBLIC_PUSHER_APP_CLUSTER || 'ap2',
-  })
+  const pusher = usePusher()
 
   const onProgress = useCallback((listener: (data: ProgressUpdate) => void) => {
     if (!projectId) return

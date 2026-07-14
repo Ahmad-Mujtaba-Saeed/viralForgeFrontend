@@ -27,6 +27,7 @@ import { SteppedPreview } from '@/components/create/stepped-preview'
 import { CaptionSample, captionStyleFor } from '@/components/create/caption-styles'
 import { isSourceField, voiceLabel, voiceColor, prettyLabel } from '@/components/create/field-steps'
 import { MusicPicker } from '@/components/create/music-picker'
+import { ProcessingStartedDialog } from '@/components/create/processing-started-dialog'
 
 type StepKey = 'source' | 'style' | 'generate'
 
@@ -69,6 +70,7 @@ function CreatePageContent() {
   // Synchronous re-entry guard so a fast double-click can't fire two renders.
   const submittingRef = useRef(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showProcessingModal, setShowProcessingModal] = useState(false)
 
   // ---- narrator voice preview (▶ on a voice chip plays a cached sample) ----
   const [previewVoice, setPreviewVoice] = useState<string | null>(null)
@@ -348,8 +350,8 @@ function CreatePageContent() {
                   key={opt}
                   onClick={() => set(opt)}
                   className={cn(
-                    'flex flex-col items-center rounded-xl border px-2 pb-3 pt-3.5 transition-all',
-                    active ? 'border-primary bg-accent-soft' : 'border-border bg-card'
+                    'flex cursor-pointer flex-col items-center rounded-xl border px-2 pb-3 pt-3.5 transition-all',
+                    active ? 'border-primary bg-accent-soft' : 'border-border bg-card hover:border-primary/40 hover:bg-inset'
                   )}
                 >
                   <span className="flex h-[46px] w-full items-center justify-center">
@@ -399,8 +401,8 @@ function CreatePageContent() {
                   key={opt}
                   onClick={() => set(opt)}
                   className={cn(
-                    'flex items-center gap-2.5 rounded-xl border py-2 pl-2 pr-3.5 transition-all',
-                    active ? 'border-primary bg-accent-soft' : 'border-border bg-card'
+                    'flex cursor-pointer items-center gap-2.5 rounded-xl border py-2 pl-2 pr-3.5 transition-all',
+                    active ? 'border-primary bg-accent-soft' : 'border-border bg-card hover:border-primary/40 hover:bg-inset'
                   )}
                 >
                   <span
@@ -412,7 +414,7 @@ function CreatePageContent() {
                       e.stopPropagation()
                       playVoicePreview(opt)
                     }}
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-white transition-transform hover:scale-110"
+                    className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-white transition-transform hover:scale-110"
                     style={{ background: voiceColor(opt) }}
                   >
                     {previewing && previewLoading ? (
@@ -605,6 +607,7 @@ function CreatePageContent() {
       dispatch(updateCurrentProject({ status: 'processing', progress: 0 }))
       // Reflect the just-spent credits in the header pill.
       fetchBilling().catch(() => {})
+      setShowProcessingModal(true)
     } catch (error: any) {
       const msg = error?.message || error || 'Failed to start processing. Please try again.'
       setLocalError(typeof msg === 'string' ? msg : 'Failed to start processing. Please try again.')
@@ -1030,6 +1033,13 @@ function CreatePageContent() {
           </div>
         </aside>
       </div>
+
+      <ProcessingStartedDialog
+        open={showProcessingModal}
+        onOpenChange={setShowProcessingModal}
+        templateName={currentProject?.title || templateConfig?.name}
+        creditsCharged={renderCost}
+      />
     </div>
   )
 }

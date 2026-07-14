@@ -13,6 +13,11 @@ import {
   Zap,
   PenLine,
   Download,
+  Brain,
+  Sparkles,
+  PlayCircle,
+  Film,
+  Trophy,
   type LucideIcon,
 } from "lucide-react"
 
@@ -28,7 +33,11 @@ export type Template = {
   tagline: string
   description: string
   credits: number
-  icon: LucideIcon
+  /** Icon slug, resolved via TEMPLATE_ICONS_BY_SLUG at render time — kept as a
+   *  string (not a component) so this type is safe to pass from the landing
+   *  page's server component down into the client variant components; React
+   *  Server Components cannot serialize component/function props. */
+  icon: string
   badge?: string
 }
 
@@ -41,7 +50,7 @@ export const TEMPLATES: Template[] = [
     description:
       "Turn a script into a narrated, animated explainer with AI b-roll, captions and background music.",
     credits: 6,
-    icon: Wand2,
+    icon: "wand2",
     badge: "Flagship",
   },
   {
@@ -51,7 +60,7 @@ export const TEMPLATES: Template[] = [
     description:
       "Drop a topic or a long video and get a fully scripted, voiced, captioned faceless short.",
     credits: 3,
-    icon: Youtube,
+    icon: "youtube",
   },
   {
     key: "yt_gameplay_short",
@@ -60,7 +69,7 @@ export const TEMPLATES: Template[] = [
     description:
       "Pull the single best moment from a gameplay video, auto-captioned and cropped to 9:16.",
     credits: 2,
-    icon: Gamepad2,
+    icon: "gamepad2",
   },
   {
     key: "yt_compilation_short",
@@ -69,7 +78,7 @@ export const TEMPLATES: Template[] = [
     description:
       "Merge 2–3 videos into one themed countdown compilation with AI commentary and captions.",
     credits: 3,
-    icon: Layers,
+    icon: "layers",
   },
   {
     key: "ai_horror_shorts",
@@ -78,7 +87,7 @@ export const TEMPLATES: Template[] = [
     description:
       "Generate a narrated horror story with eerie AI visuals and atmospheric ambience.",
     credits: 5,
-    icon: Ghost,
+    icon: "ghost",
   },
   {
     key: "ai_image_based_shorts",
@@ -87,9 +96,62 @@ export const TEMPLATES: Template[] = [
     description:
       "Turn a prompt into a listicle-style short built from AI-generated images and voiceover.",
     credits: 5,
-    icon: Images,
+    icon: "images",
+  },
+  {
+    key: "ranking_moments_short",
+    name: "Top Moments Ranking",
+    tagline: "One video → countdown ranking",
+    description:
+      "Turn one video into a countdown ranking short with star ratings, a colorful rank rail and bold captions.",
+    credits: 3,
+    icon: "trophy",
   },
 ]
+
+/** Maps a template icon slug (backend TemplateProcessorFactory slugs + the static list's own slugs) to a Lucide component. */
+export const TEMPLATE_ICONS_BY_SLUG: Record<string, LucideIcon> = {
+  brain: Brain,
+  sparkles: Sparkles,
+  ghost: Ghost,
+  "play-circle": PlayCircle,
+  film: Film,
+  trophy: Trophy,
+  presentation: Wand2,
+  wand2: Wand2,
+  youtube: Youtube,
+  gamepad2: Gamepad2,
+  layers: Layers,
+  images: Images,
+}
+
+/** Short taglines keyed by template_type, reused when building the live (API-driven) template list. */
+export const TEMPLATE_TAGLINES: Record<string, string> = Object.fromEntries(
+  TEMPLATES.map((t) => [t.key, t.tagline])
+)
+
+export type PublicApiTemplate = {
+  key: string
+  name: string
+  description: string
+  icon: string
+  aspect_ratio?: string
+  credits: number
+  badge?: string | null
+}
+
+/** Builds the landing page's live Template list from `/api/public/landing`'s enabled-only template array. */
+export function buildTemplatesFromApi(items: PublicApiTemplate[]): Template[] {
+  return items.map((item) => ({
+    key: item.key,
+    name: item.name,
+    tagline: TEMPLATE_TAGLINES[item.key] ?? item.description.split(".")[0],
+    description: item.description,
+    credits: item.credits,
+    icon: item.icon in TEMPLATE_ICONS_BY_SLUG ? item.icon : "wand2",
+    badge: item.badge ?? undefined,
+  }))
+}
 
 export type Feature = {
   icon: LucideIcon

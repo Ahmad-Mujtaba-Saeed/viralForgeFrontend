@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import api from '@/lib/axios'
 import { useBilling } from '@/hooks/useBilling'
+import { useProjectProgress } from '@/hooks/usePusher'
+import { ProcessingStartedDialog } from '@/components/create/processing-started-dialog'
 import {
   Loader2, Upload, X, Film, RefreshCw, Play, AlertTriangle,
   Image as ImageIcon, LayoutGrid, Columns2, Square, Shuffle, Move,
@@ -141,7 +143,8 @@ export default function StoryboardPage() {
   const [loading, setLoading] = useState(true)
   const [rendering, setRendering] = useState(false)
   const [switchingMode, setSwitchingMode] = useState<string | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [showProcessingModal, setShowProcessingModal] = useState(false)
+  const projectProgress = useProjectProgress(id ?? null)
 
   const baseCost = costFor('ai_explainer_video')
   // The §10.6 aspect-variant bundle multiplies the render charge.
@@ -169,23 +172,21 @@ export default function StoryboardPage() {
     fetchBoard()
   }, [fetchBoard])
 
-  // Poll while the backend is working (analyzing or rendering).
+  // Realtime instead of polling: the backend broadcasts on the same
+  // project.{id} Pusher channel during both analysis and rendering. Any one
+  // of these event types can fire depending on which phase is running — the
+  // analysis-failure path in particular only emits `project.progress` (not
+  // project.error/status) — so every event just re-fetches the full board
+  // rather than trying to merge partial payloads client-side.
   useEffect(() => {
-    const busy = board && ['analyzing', 'processing'].includes(board.status)
-    if (busy && !pollRef.current) {
-      pollRef.current = setInterval(fetchBoard, 3000)
-    }
-    if (!busy && pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current)
-        pollRef.current = null
-      }
-    }
-  }, [board, fetchBoard])
+    const cleanups = [
+      projectProgress.onProgress(() => fetchBoard()),
+      projectProgress.onStatus(() => fetchBoard()),
+      projectProgress.onCompletion(() => fetchBoard()),
+      projectProgress.onError(() => fetchBoard()),
+    ]
+    return () => cleanups.forEach((cleanup) => cleanup?.())
+  }, [projectProgress, fetchBoard])
 
   const handleRender = async () => {
     // Credit gate (server enforces this too).
@@ -198,6 +199,7 @@ export default function StoryboardPage() {
       await api.post(`/api/explainer/projects/${id}/render`)
       await fetchBoard()
       fetchBilling().catch(() => {})
+      setShowProcessingModal(true)
     } catch (err: any) {
       if (err.response?.status === 402) {
         router.push('/dashboard/billing')
@@ -603,6 +605,13 @@ export default function StoryboardPage() {
           </button>
         </div>
       )}
+
+      <ProcessingStartedDialog
+        open={showProcessingModal}
+        onOpenChange={setShowProcessingModal}
+        templateName={board.title}
+        creditsCharged={explainerCost}
+      />
     </div>
   )
 }
