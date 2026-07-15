@@ -150,7 +150,7 @@ export function DashboardContent() {
           <Link
             key={q.title}
             href={q.href}
-            className="group flex items-center gap-3.5 rounded-2xl border border-border bg-card p-4 shadow-soft transition-transform hover:-translate-y-0.5"
+            className="holo group flex items-center gap-3.5 rounded-2xl border border-border bg-card p-4 shadow-soft transition-transform hover:-translate-y-0.5"
           >
             <span
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-white"
@@ -173,7 +173,7 @@ export function DashboardContent() {
           <h2 className="mb-3.5 text-base font-semibold tracking-tight text-foreground">
             Rendering now
           </h2>
-          <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft sm:gap-5 sm:p-5">
+          <div className="holo flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft sm:gap-5 sm:p-5">
             <div
               className="relative h-[74px] w-[54px] flex-shrink-0 overflow-hidden rounded-lg"
               style={{ background: gradientFor(rendering.id) }}
@@ -259,7 +259,7 @@ export function DashboardContent() {
                   className="group cursor-pointer text-left"
                 >
                   <div
-                    className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl"
+                    className="holo relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl"
                     style={{ background: gradientFor(p.id) }}
                   >
                     {p.thumbnail_path ? (

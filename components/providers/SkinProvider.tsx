@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { DEFAULT_SKIN, SKIN_STORAGE_KEY, isSkin, type Skin } from '@/lib/skins'
+import { HoloController } from '@/components/providers/HoloController'
 
 type SkinContextValue = {
   skin: Skin
@@ -58,6 +59,8 @@ export function SkinProvider({
       {children}
       {/* Liquid Glass is the only skin, so the prism field is always on. */}
       <AmbientBackdrop active={skin === 'prism'} />
+      {/* Powers the holographic cursor sheen on `.holo` cards app-wide. */}
+      <HoloController />
     </SkinContext.Provider>
   )
 }

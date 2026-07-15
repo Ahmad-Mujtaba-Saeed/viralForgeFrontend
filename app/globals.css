@@ -634,6 +634,34 @@
     .card-lift { transition: none; }
     .card-lift:hover { transform: none; }
   }
+
+  /* Holographic cursor sheen — the oil-slick-on-glass effect from the landing.
+     Position is fed by HoloController via --hx/--hy; add the `holo` class to any
+     card to opt in. The sheen only appears on hover and never blocks clicks. */
+  .holo {
+    position: relative;
+  }
+  .holo::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    background: radial-gradient(
+      220px circle at var(--hx, 50%) var(--hy, 50%),
+      rgba(91, 140, 255, 0.18),
+      rgba(255, 111, 207, 0.12) 42%,
+      transparent 72%
+    );
+  }
+  .holo:hover::after {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .holo::after { transition: none; }
+  }
 }
 
 @keyframes aurora-drift-a {

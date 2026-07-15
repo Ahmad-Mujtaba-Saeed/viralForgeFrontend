@@ -172,10 +172,14 @@ export default function TemplatesPage() {
       {/* Hero + stats */}
       {featured && (
         <div className="flex flex-col gap-5 lg:flex-row">
-          <div className="relative flex min-h-[188px] flex-1 flex-col justify-between overflow-hidden rounded-3xl bg-[linear-gradient(135deg,#1A1916,#2A2622)] p-8">
+          <div className="relative flex min-h-[188px] flex-1 flex-col justify-between overflow-hidden rounded-3xl bg-[linear-gradient(135deg,#5B7CF6,#7C5CFF_50%,#C05CE6)] p-8">
             <div
               className="pointer-events-none absolute -right-8 -top-8 h-52 w-52 rounded-full"
-              style={{ background: "radial-gradient(circle, rgba(232,73,43,.5), transparent 70%)" }}
+              style={{ background: "radial-gradient(circle, rgba(255,255,255,.45), transparent 70%)" }}
+            />
+            <div
+              className="pointer-events-none absolute -bottom-10 -left-6 h-44 w-44 rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(255,111,207,.55), transparent 70%)" }}
             />
             <div className="relative">
               <div className="flex items-center gap-2">
@@ -286,7 +290,7 @@ export default function TemplatesPage() {
                 layout
                 className={cn("group card-lift", !template.enabled && "opacity-60")}
               >
-                <div className="relative aspect-[16/11] overflow-hidden rounded-2xl" style={{ background: pal.bg }}>
+                <div className="holo relative aspect-[16/11] overflow-hidden rounded-2xl" style={{ background: pal.bg }}>
                   <div className="absolute inset-0">
                     <TemplateArt kind={artKindFor(template.templateType)} accent={pal.a} />
                   </div>

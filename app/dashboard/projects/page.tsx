@@ -181,7 +181,7 @@ export default function ProjectsPage() {
               <motion.div
                 key={project.id}
                 whileHover={{ y: -2 }}
-                className="group relative overflow-hidden rounded-2xl border border-border bg-card shadow-soft"
+                className="holo group relative overflow-hidden rounded-2xl border border-border bg-card shadow-soft"
               >
                 <button
                   type="button"
