@@ -1,15 +1,17 @@
 import LandingEditorial from "@/components/landing/variants/editorial"
 import LandingCinematic from "@/components/landing/variants/cinematic"
 import LandingMinimal from "@/components/landing/variants/minimal"
+import LandingAurora from "@/components/landing/variants/aurora"
+import LandingLiquidGlass from "@/components/landing/variants/liquidglass"
 import { TEMPLATES, buildTemplatesFromApi, type Template, type PublicApiTemplate } from "@/components/landing/shared/content"
 
 // Re-read the admin-selected variant on every request so a switch in
 // Settings takes effect immediately (no rebuild, no client-side flash).
 export const dynamic = "force-dynamic"
 
-type Variant = "editorial" | "cinematic" | "minimal"
+type Variant = "editorial" | "cinematic" | "minimal" | "aurora" | "prism"
 
-const VARIANTS: Variant[] = ["editorial", "cinematic", "minimal"]
+const VARIANTS: Variant[] = ["editorial", "cinematic", "minimal", "aurora", "prism"]
 
 async function getLandingData(): Promise<{ variant: Variant; templates: Template[] }> {
   const base = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
@@ -37,6 +39,8 @@ async function getLandingData(): Promise<{ variant: Variant; templates: Template
 export default async function Home() {
   const { variant, templates } = await getLandingData()
 
+  if (variant === "prism") return <LandingLiquidGlass templates={templates} />
+  if (variant === "aurora") return <LandingAurora templates={templates} />
   if (variant === "cinematic") return <LandingCinematic templates={templates} />
   if (variant === "minimal") return <LandingMinimal templates={templates} />
   return <LandingEditorial templates={templates} />

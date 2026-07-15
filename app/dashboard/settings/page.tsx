@@ -21,9 +21,16 @@ import {
   LayoutGrid,
   Flame,
   Ban,
+  Sparkles,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react'
+import { useTheme } from 'next-themes'
 import { useAuth, useAppDispatch } from '@/hooks/useAuth'
 import { updateProfile, changePassword } from '@/store/authSlice'
+import { useSkin } from '@/components/providers/SkinProvider'
+import { SKINS, SKIN_META, type Skin } from '@/lib/skins'
 import { cn } from '@/lib/utils'
 import api from '@/lib/axios'
 
@@ -431,6 +438,16 @@ const LANDING_META: Record<string, { label: string; desc: string; swatch: string
     desc: 'White, airy and restrained. A calm, modern SaaS look.',
     swatch: ['#FFFFFF', '#F4F4F5', '#18181B'],
   },
+  aurora: {
+    label: 'Aurora glass',
+    desc: 'Frosted glass over a drifting violet–cyan aurora, with scroll-driven motion.',
+    swatch: ['#08071A', '#7C5CFF', '#22D3EE'],
+  },
+  prism: {
+    label: 'Liquid glass',
+    desc: 'Bright, prismatic frosted glass over a pastel mesh — iridescent, airy, Apple-style.',
+    swatch: ['#EAEEF9', '#5B8CFF', '#FF6FCF'],
+  },
 }
 
 function AdminLanding() {
@@ -540,6 +557,223 @@ function AdminLanding() {
             })}
           </div>
           <p className="mt-3 text-xs text-ink3">Changes go live immediately on the public homepage — refresh to see them.</p>
+        </div>
+      )}
+    </motion.section>
+  )
+}
+
+/**
+ * Appearance — visible to every user.
+ *
+ * Two independent axes: the *skin* (colour scheme, `data-theme` on <html>)
+ * and light/dark *mode* (next-themes' `.dark` class). Each skin ships both
+ * a light and a dark palette, so the two compose freely.
+ */
+function Appearance() {
+  const { skin, setSkin, mounted } = useSkin()
+  const { theme, setTheme } = useTheme()
+
+  const modes: { key: string; label: string; icon: typeof Sun }[] = [
+    { key: 'light', label: 'Light', icon: Sun },
+    { key: 'dark', label: 'Dark', icon: Moon },
+    { key: 'system', label: 'System', icon: Monitor },
+  ]
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 }}
+      className="mt-7 rounded-2xl border border-border bg-card p-6 shadow-soft"
+    >
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <Sparkles className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-[16px] font-semibold text-foreground">Appearance</h2>
+          <p className="text-xs text-muted-foreground">
+            Choose how ViralForge looks for you. Saved to this browser.
+          </p>
+        </div>
+      </div>
+
+      <span className="mb-2 block text-[13px] font-semibold text-foreground">Theme</span>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {SKINS.map((opt) => {
+          const meta = SKIN_META[opt]
+          const active = mounted && skin === opt
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setSkin(opt)}
+              className={cn(
+                'relative flex cursor-pointer flex-col items-start gap-2 rounded-xl border p-4 text-left transition-colors',
+                active ? 'border-primary bg-accent-soft' : 'border-border bg-card hover:border-primary/50'
+              )}
+            >
+              <div className="flex w-full items-center justify-between">
+                <div className="flex gap-1">
+                  {meta.swatch.map((c, i) => (
+                    <span
+                      key={i}
+                      className="h-4 w-4 rounded-full border border-black/5"
+                      style={{ background: c }}
+                    />
+                  ))}
+                </div>
+                {active && <Check className="h-4 w-4 text-primary" />}
+              </div>
+              <span className="text-sm font-semibold text-foreground">{meta.label}</span>
+              <span className="text-xs text-ink3">{meta.desc}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      <span className="mb-2 mt-6 block text-[13px] font-semibold text-foreground">Mode</span>
+      <div className="flex gap-2">
+        {modes.map((m) => {
+          const active = mounted && theme === m.key
+          return (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => setTheme(m.key)}
+              className={cn(
+                'inline-flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border text-[13px] font-semibold transition-colors',
+                active
+                  ? 'border-primary bg-accent-soft text-primary'
+                  : 'border-border bg-card text-muted-foreground hover:border-primary/50'
+              )}
+            >
+              <m.icon className="h-4 w-4" />
+              {m.label}
+            </button>
+          )
+        })}
+      </div>
+      <p className="mt-3 text-xs text-ink3">
+        Each theme has its own light and dark palette — the two settings combine.
+      </p>
+    </motion.section>
+  )
+}
+
+type ThemeState = {
+  default: string
+  options: string[]
+}
+
+/** Admin: the theme new visitors get before they pick one of their own. */
+function AdminTheme() {
+  const [state, setState] = useState<ThemeState | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    api
+      .get('/api/admin/settings')
+      .then((res) => setState(res.data.theme))
+      .catch(() => setMsg({ kind: 'error', text: 'Failed to load theme settings.' }))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const selectTheme = async (value: string) => {
+    if (saving || state?.default === value) return
+    setMsg(null)
+    setSaving(value)
+    try {
+      const res = await api.put('/api/admin/settings', { theme_default: value })
+      setState(res.data.theme)
+      setMsg({
+        kind: 'success',
+        text: `Default theme set to “${SKIN_META[value as Skin]?.label ?? value}”.`,
+      })
+    } catch {
+      setMsg({ kind: 'error', text: 'Failed to update the default theme.' })
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.14 }}
+      className="mt-7 rounded-2xl border border-border bg-card p-6 shadow-soft"
+    >
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <Palette className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-[16px] font-semibold text-foreground">Default theme</h2>
+          <p className="text-xs text-muted-foreground">
+            Admin only — what new visitors see before choosing their own in Appearance.
+          </p>
+        </div>
+      </div>
+
+      {msg && <Banner kind={msg.kind} text={msg.text} />}
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-ink3">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : !state ? (
+        <p className="py-4 text-sm text-ink3">Settings unavailable.</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {state.options.map((opt) => {
+            const meta = SKIN_META[opt as Skin] ?? {
+              label: opt,
+              desc: '',
+              swatch: ['#E9E6E0', '#E9E6E0', '#E9E6E0'],
+            }
+            const active = state.default === opt
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => selectTheme(opt)}
+                disabled={!!saving}
+                className={cn(
+                  'flex cursor-pointer flex-col items-start gap-2 rounded-xl border p-4 text-left transition-colors',
+                  active ? 'border-primary bg-accent-soft' : 'border-border bg-card hover:border-primary/50',
+                  saving && 'cursor-not-allowed opacity-70'
+                )}
+              >
+                <div className="flex w-full items-center justify-between">
+                  <div className="flex gap-1">
+                    {meta.swatch.map((c, i) => (
+                      <span
+                        key={i}
+                        className="h-4 w-4 rounded-full border border-black/5"
+                        style={{ background: c }}
+                      />
+                    ))}
+                  </div>
+                  {saving === opt ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  ) : active ? (
+                    <Check className="h-4 w-4 text-primary" />
+                  ) : null}
+                </div>
+                <span className="text-sm font-semibold text-foreground">{meta.label}</span>
+                <span className="text-xs text-ink3">{meta.desc}</span>
+                {active && (
+                  <span className="mt-0.5 inline-flex items-center rounded-full bg-good/10 px-2 py-0.5 text-[11px] font-medium text-good">
+                    Site default
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
     </motion.section>
@@ -1248,7 +1482,11 @@ export default function SettingsPage() {
         </form>
       </motion.section>
 
+      {/* Everyone gets to pick how the app looks for them. */}
+      <Appearance />
+
       {/* Admin-only settings */}
+      {user?.is_admin && <AdminTheme />}
       {user?.is_admin && <AdminTemplates />}
       {user?.is_admin && <AdminLanding />}
       {user?.is_admin && <AdminNarration />}

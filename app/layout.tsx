@@ -5,6 +5,8 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { ReduxProvider } from '@/components/providers/ReduxProvider'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 import { Toaster } from '@/components/ui/sonner'
+import { SkinProvider } from '@/components/providers/SkinProvider'
+import { DEFAULT_SKIN, SKIN_INIT_SCRIPT, isSkin, type Skin } from '@/lib/skins'
 import './globals.css'
 
 const hankenGrotesk = Hanken_Grotesk({
@@ -47,13 +49,50 @@ export const metadata: Metadata = {
     apple: '/apple-icon.png',
   },
 }
-export default function RootLayout({
+/**
+ * The admin-selected default skin, for visitors who haven't picked their own.
+ * Stamped onto <html> during SSR so the first paint is already correct; the
+ * inline script below then applies a stored personal choice over the top.
+ */
+async function getDefaultSkin(): Promise<Skin> {
+  const base = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+  try {
+    // This runs in the ROOT layout, so it is on the critical path of every
+    // page. A slow or wedged backend must never hang the whole app — bail out
+    // fast and fall back, same as the landing page's variant fetch does.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 2500)
+    const res = await fetch(`${base}/api/public/landing`, {
+      next: { revalidate: 60 },
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    })
+    clearTimeout(timer)
+    if (!res.ok) return DEFAULT_SKIN
+    const data = await res.json()
+    return isSkin(data?.theme) ? data.theme : DEFAULT_SKIN
+  } catch {
+    return DEFAULT_SKIN
+  }
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const defaultSkin = await getDefaultSkin()
+
   return (
-        <html lang="en" className={`${hankenGrotesk.variable} ${bricolageGrotesque.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      data-theme={defaultSkin}
+      className={`${hankenGrotesk.variable} ${bricolageGrotesque.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: SKIN_INIT_SCRIPT }} />
+      </head>
       <body className="font-sans antialiased bg-background">
         <ReduxProvider>
           <AuthProvider>
@@ -63,8 +102,10 @@ export default function RootLayout({
               enableSystem
               disableTransitionOnChange
             >
-              {children}
-              <Toaster position="top-right" richColors />
+              <SkinProvider defaultSkin={defaultSkin}>
+                {children}
+                <Toaster position="top-right" richColors />
+              </SkinProvider>
             </ThemeProvider>
           </AuthProvider>
         </ReduxProvider>

@@ -103,7 +103,7 @@ export function Header({ sidebarCollapsed }: HeaderProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="h-9 w-9 rounded-full bg-gradient-to-br from-[#E8492B] to-[#F6A14A] flex items-center justify-center text-sm font-bold text-white shadow-soft outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-primary"
+                className="h-9 w-9 rounded-full bg-gradient-to-br from-[var(--chart-1)] to-[var(--chart-5)] flex items-center justify-center text-sm font-bold text-white shadow-soft outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-primary"
                 aria-label="Open account menu"
               >
                 {initials}

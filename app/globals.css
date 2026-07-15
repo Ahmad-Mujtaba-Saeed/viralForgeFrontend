@@ -52,6 +52,18 @@
   --warn-soft: #FAF1DE;
   --shadow: 0 1px 2px rgba(26,25,22,.04), 0 8px 24px rgba(26,25,22,.05);
   --shadow-lg: 0 24px 64px rgba(26,25,22,.10);
+
+  /* Glass system — opaque fallbacks so .glass degrades to a plain card
+     in the non-glass themes. Aurora overrides these with real translucency. */
+  --glass-bg: var(--card);
+  --glass-bg-strong: var(--card);
+  --glass-border: var(--border);
+  --glass-highlight: transparent;
+  --glass-blur: 0px;
+  --aurora-1: transparent;
+  --aurora-2: transparent;
+  --aurora-3: transparent;
+  --grain-opacity: 0;
 }
 
 .dark {
@@ -101,6 +113,282 @@
   --warn-soft: #2A2210;
   --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
   --shadow-lg: 0 24px 64px rgba(0,0,0,.55);
+
+  --glass-bg: var(--card);
+  --glass-bg-strong: var(--card);
+  --glass-border: var(--border);
+  --glass-highlight: transparent;
+  --glass-blur: 0px;
+}
+
+/* ===================================================================
+   AURORA GLASS — a translucent, aurora-lit skin.
+
+   Selected with `data-theme="aurora"` on <html>, layered on top of the
+   light/dark class so both modes stay meaningful:
+     [data-theme=aurora]        → Aurora Day  (pale lavender, white glass)
+     [data-theme=aurora].dark   → Aurora Night (midnight indigo, the hero look)
+
+   The surface tokens (--card/--sidebar/--popover) are deliberately
+   TRANSLUCENT here. Paired with the backdrop-filter upgrade further down,
+   every existing `bg-card` surface in the app becomes real frosted glass
+   without touching a single component.
+   =================================================================== */
+
+:root[data-theme='aurora'] {
+  --background: #F6F4FF;
+  --foreground: #16142E;
+  --card: rgba(255, 255, 255, 0.72);
+  --card-foreground: #16142E;
+  --popover: rgba(255, 255, 255, 0.94);
+  --popover-foreground: #16142E;
+  --primary: #6D4AFF;
+  --primary-foreground: #FFFFFF;
+  --secondary: rgba(109, 74, 255, 0.07);
+  --secondary-foreground: #16142E;
+  --muted: rgba(109, 74, 255, 0.06);
+  --muted-foreground: #625C8A;
+  --accent: #6D4AFF;
+  --accent-foreground: #FFFFFF;
+  --destructive: #E5385A;
+  --destructive-foreground: #FFFFFF;
+  --border: rgba(22, 20, 46, 0.10);
+  --input: rgba(22, 20, 46, 0.12);
+  --ring: #6D4AFF;
+  --chart-1: #6D4AFF;
+  --chart-2: #06B6D4;
+  --chart-3: #0FA97C;
+  --chart-4: #F59E0B;
+  --chart-5: #EC4899;
+  --radius: 1rem;
+  --sidebar: rgba(255, 255, 255, 0.60);
+  --sidebar-foreground: #16142E;
+  --sidebar-primary: #6D4AFF;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(255, 255, 255, 0.85);
+  --sidebar-accent-foreground: #16142E;
+  --sidebar-border: rgba(22, 20, 46, 0.09);
+  --sidebar-ring: #6D4AFF;
+
+  --rail: rgba(255, 255, 255, 0.55);
+  --inset: rgba(109, 74, 255, 0.06);
+  --ink3: #918BB8;
+  --line2: rgba(22, 20, 46, 0.07);
+  --accent-soft: rgba(109, 74, 255, 0.10);
+  --accent-line: rgba(109, 74, 255, 0.28);
+  --good: #0FA97C;
+  --good-soft: rgba(15, 169, 124, 0.12);
+  --warn: #B87A0F;
+  --warn-soft: rgba(245, 158, 11, 0.14);
+  --shadow: 0 1px 2px rgba(45, 30, 90, 0.05), 0 8px 28px rgba(45, 30, 90, 0.07);
+  --shadow-lg: 0 28px 70px rgba(45, 30, 90, 0.16);
+
+  /* Glass system */
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.90);
+  --glass-highlight: rgba(255, 255, 255, 0.95);
+  --glass-blur: 20px;
+
+  /* Aurora mesh — the light that the glass refracts */
+  --aurora-1: rgba(124, 92, 255, 0.30);
+  --aurora-2: rgba(34, 211, 238, 0.24);
+  --aurora-3: rgba(236, 72, 153, 0.20);
+  --grain-opacity: 0.025;
+}
+
+:root[data-theme='aurora'].dark {
+  --background: #08071A;
+  --foreground: #EAE8FF;
+  --card: rgba(255, 255, 255, 0.055);
+  --card-foreground: #EAE8FF;
+  --popover: rgba(20, 18, 44, 0.92);
+  --popover-foreground: #EAE8FF;
+  --primary: #7C5CFF;
+  --primary-foreground: #FFFFFF;
+  --secondary: rgba(255, 255, 255, 0.05);
+  --secondary-foreground: #EAE8FF;
+  --muted: rgba(255, 255, 255, 0.045);
+  --muted-foreground: #A9A3D9;
+  --accent: #7C5CFF;
+  --accent-foreground: #FFFFFF;
+  --destructive: #FF4D6D;
+  --destructive-foreground: #FFFFFF;
+  --border: rgba(255, 255, 255, 0.10);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #7C5CFF;
+  --chart-1: #7C5CFF;
+  --chart-2: #22D3EE;
+  --chart-3: #34E2B0;
+  --chart-4: #FFC24B;
+  --chart-5: #FF5CA8;
+  --sidebar: rgba(255, 255, 255, 0.035);
+  --sidebar-foreground: #EAE8FF;
+  --sidebar-primary: #7C5CFF;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #EAE8FF;
+  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-ring: #7C5CFF;
+
+  --rail: rgba(255, 255, 255, 0.03);
+  --inset: rgba(255, 255, 255, 0.055);
+  --ink3: #7B76A8;
+  --line2: rgba(255, 255, 255, 0.07);
+  --accent-soft: rgba(124, 92, 255, 0.16);
+  --accent-line: rgba(124, 92, 255, 0.38);
+  --good: #34E2B0;
+  --good-soft: rgba(52, 226, 176, 0.12);
+  --warn: #FFC24B;
+  --warn-soft: rgba(255, 194, 75, 0.12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 32px 80px rgba(4, 3, 16, 0.75);
+
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-bg-strong: rgba(255, 255, 255, 0.10);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.28);
+  --glass-blur: 20px;
+
+  --aurora-1: rgba(124, 92, 255, 0.50);
+  --aurora-2: rgba(34, 211, 238, 0.34);
+  --aurora-3: rgba(255, 92, 168, 0.32);
+  --grain-opacity: 0.05;
+}
+
+/* ===================================================================
+   LIQUID GLASS — a bright, prismatic, light-first glass skin.
+
+   Selected with `data-theme="prism"` on <html>. The opposite pole to
+   Aurora: near-white frosted glass over a soft pastel prism mesh, lit by
+   iridescent blue–pink–lilac light.
+     [data-theme=prism]        → Liquid Glass Day  (the hero look)
+     [data-theme=prism].dark   → Liquid Glass Night (deep indigo glass)
+
+   Like Aurora, the surface tokens are TRANSLUCENT, so paired with the
+   backdrop-filter upgrade below every existing app surface becomes real
+   frosted glass with no per-component edits.
+   =================================================================== */
+
+:root[data-theme='prism'] {
+  --background: #EAEEF9;
+  --foreground: #0E1030;
+  --card: rgba(255, 255, 255, 0.58);
+  --card-foreground: #0E1030;
+  --popover: rgba(255, 255, 255, 0.95);
+  --popover-foreground: #0E1030;
+  --primary: #6D5EF6;
+  --primary-foreground: #FFFFFF;
+  --secondary: rgba(109, 94, 246, 0.07);
+  --secondary-foreground: #0E1030;
+  --muted: rgba(109, 94, 246, 0.06);
+  --muted-foreground: #565A80;
+  --accent: #6D5EF6;
+  --accent-foreground: #FFFFFF;
+  --destructive: #E5385A;
+  --destructive-foreground: #FFFFFF;
+  --border: rgba(15, 16, 48, 0.10);
+  --input: rgba(15, 16, 48, 0.12);
+  --ring: #6D5EF6;
+  --chart-1: #5B8CFF;
+  --chart-2: #9B7CFF;
+  --chart-3: #54E3C6;
+  --chart-4: #FFB27A;
+  --chart-5: #FF6FCF;
+  --radius: 1.25rem;
+  --sidebar: rgba(255, 255, 255, 0.55);
+  --sidebar-foreground: #0E1030;
+  --sidebar-primary: #6D5EF6;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(255, 255, 255, 0.85);
+  --sidebar-accent-foreground: #0E1030;
+  --sidebar-border: rgba(15, 16, 48, 0.08);
+  --sidebar-ring: #6D5EF6;
+
+  --rail: rgba(255, 255, 255, 0.50);
+  --inset: rgba(109, 94, 246, 0.05);
+  --ink3: #8C90B4;
+  --line2: rgba(15, 16, 48, 0.06);
+  --accent-soft: rgba(109, 94, 246, 0.10);
+  --accent-line: rgba(109, 94, 246, 0.28);
+  --good: #12A98C;
+  --good-soft: rgba(84, 227, 198, 0.16);
+  --warn: #C4820E;
+  --warn-soft: rgba(255, 178, 122, 0.18);
+  --shadow: 0 1px 2px rgba(40, 32, 110, 0.05), 0 10px 30px rgba(40, 32, 110, 0.08);
+  --shadow-lg: 0 30px 70px rgba(40, 32, 110, 0.16);
+
+  /* Glass system */
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.74);
+  --glass-border: rgba(255, 255, 255, 0.90);
+  --glass-highlight: rgba(255, 255, 255, 1);
+  --glass-blur: 22px;
+
+  /* Prism mesh — the pastel light the glass refracts */
+  --aurora-1: rgba(91, 140, 255, 0.34);
+  --aurora-2: rgba(255, 111, 207, 0.28);
+  --aurora-3: rgba(155, 124, 255, 0.30);
+  --grain-opacity: 0.02;
+}
+
+:root[data-theme='prism'].dark {
+  --background: #0B0D22;
+  --foreground: #ECEEFF;
+  --card: rgba(255, 255, 255, 0.06);
+  --card-foreground: #ECEEFF;
+  --popover: rgba(18, 20, 44, 0.94);
+  --popover-foreground: #ECEEFF;
+  --primary: #8B7CFF;
+  --primary-foreground: #FFFFFF;
+  --secondary: rgba(255, 255, 255, 0.05);
+  --secondary-foreground: #ECEEFF;
+  --muted: rgba(255, 255, 255, 0.045);
+  --muted-foreground: #A6A9D4;
+  --accent: #8B7CFF;
+  --accent-foreground: #FFFFFF;
+  --destructive: #FF4D6D;
+  --destructive-foreground: #FFFFFF;
+  --border: rgba(255, 255, 255, 0.10);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #8B7CFF;
+  --chart-1: #6BA0FF;
+  --chart-2: #A98CFF;
+  --chart-3: #54E3C6;
+  --chart-4: #FFC48A;
+  --chart-5: #FF8AD8;
+  --sidebar: rgba(255, 255, 255, 0.035);
+  --sidebar-foreground: #ECEEFF;
+  --sidebar-primary: #8B7CFF;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #ECEEFF;
+  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-ring: #8B7CFF;
+
+  --rail: rgba(255, 255, 255, 0.03);
+  --inset: rgba(255, 255, 255, 0.05);
+  --ink3: #7D80AE;
+  --line2: rgba(255, 255, 255, 0.07);
+  --accent-soft: rgba(139, 124, 255, 0.16);
+  --accent-line: rgba(139, 124, 255, 0.38);
+  --good: #3FE0C0;
+  --good-soft: rgba(63, 224, 192, 0.12);
+  --warn: #FFC48A;
+  --warn-soft: rgba(255, 196, 138, 0.12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 32px 80px rgba(4, 4, 20, 0.75);
+
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-bg-strong: rgba(255, 255, 255, 0.10);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-highlight: rgba(255, 255, 255, 0.30);
+  --glass-blur: 22px;
+
+  --aurora-1: rgba(91, 140, 255, 0.44);
+  --aurora-2: rgba(255, 111, 207, 0.32);
+  --aurora-3: rgba(155, 124, 255, 0.40);
+  --grain-opacity: 0.045;
 }
 
 @theme inline {
@@ -227,4 +515,177 @@
   .shadow-soft-lg {
     box-shadow: var(--shadow-lg);
   }
+
+  /* ---------------- Glass surfaces ---------------- */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    border: 1px solid var(--glass-border);
+  }
+  .glass-strong {
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(160%);
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(160%);
+    border: 1px solid var(--glass-border);
+  }
+
+  /* Specular top edge — the highlight that sells glass as a physical surface. */
+  .glass-edge {
+    position: relative;
+  }
+  .glass-edge::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--glass-highlight),
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  /* Accent glow, used behind CTAs and focal cards. */
+  .glow-accent {
+    box-shadow:
+      0 0 0 1px var(--accent-line),
+      0 8px 40px -8px var(--primary);
+  }
+
+  /* ---------------- Aurora backdrop ---------------- */
+  /* A fixed, slowly drifting light field. Sits behind everything and is what
+     the translucent surfaces actually refract — without it, glass has nothing
+     to be glassy *over*. */
+  .aurora-field {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--background);
+  }
+  .aurora-field::before,
+  .aurora-field::after {
+    content: '';
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    will-change: transform;
+  }
+  .aurora-field::before {
+    width: 60vw;
+    height: 60vw;
+    top: -18vw;
+    left: -10vw;
+    background: radial-gradient(circle at 50% 50%, var(--aurora-1), transparent 68%);
+    animation: aurora-drift-a 24s ease-in-out infinite alternate;
+  }
+  .aurora-field::after {
+    width: 55vw;
+    height: 55vw;
+    bottom: -20vw;
+    right: -12vw;
+    background: radial-gradient(circle at 50% 50%, var(--aurora-2), transparent 68%);
+    animation: aurora-drift-b 30s ease-in-out infinite alternate;
+  }
+  /* Third pool — a real element so we get a 3-colour mesh, not just two. */
+  .aurora-orb {
+    position: absolute;
+    width: 46vw;
+    height: 46vw;
+    top: 28%;
+    left: 45%;
+    border-radius: 9999px;
+    filter: blur(100px);
+    background: radial-gradient(circle at 50% 50%, var(--aurora-3), transparent 68%);
+    animation: aurora-drift-c 26s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  /* Film grain — kills gradient banding and adds tactile texture. */
+  .aurora-grain {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+  }
+
+  .text-aurora {
+    background: linear-gradient(110deg, var(--chart-1), var(--chart-2) 45%, var(--chart-5));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes aurora-drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(8vw, 6vh, 0) scale(1.15); }
+}
+@keyframes aurora-drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1.1); }
+  to   { transform: translate3d(-9vw, -5vh, 0) scale(1); }
+}
+@keyframes aurora-drift-c {
+  from { transform: translate3d(-4vw, 0, 0) scale(0.95); }
+  to   { transform: translate3d(6vw, -8vh, 0) scale(1.2); }
+}
+
+/* Respect reduced-motion: hold the aurora still rather than drifting it. */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-field::before,
+  .aurora-field::after,
+  .aurora-orb {
+    animation: none;
+  }
+}
+
+/* ===================================================================
+   The free upgrade: in Aurora, every surface the app already paints with
+   a design token becomes true frosted glass. Because --card/--sidebar/
+   --popover are translucent in this theme, adding a backdrop-filter to
+   the utilities that consume them turns the entire existing dashboard
+   glassy with no per-component edits.
+   =================================================================== */
+:root[data-theme='aurora'] .bg-card,
+:root[data-theme='aurora'] .bg-sidebar,
+:root[data-theme='aurora'] .bg-popover,
+:root[data-theme='aurora'] .bg-inset,
+:root[data-theme='aurora'] [data-slot='dialog-content'],
+:root[data-theme='aurora'] [data-slot='alert-dialog-content'],
+:root[data-theme='aurora'] [data-slot='dropdown-menu-content'],
+:root[data-theme='prism'] .bg-card,
+:root[data-theme='prism'] .bg-sidebar,
+:root[data-theme='prism'] .bg-popover,
+:root[data-theme='prism'] .bg-inset,
+:root[data-theme='prism'] [data-slot='dialog-content'],
+:root[data-theme='prism'] [data-slot='alert-dialog-content'],
+:root[data-theme='prism'] [data-slot='dropdown-menu-content'] {
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+}
+
+/* The aurora field is a fixed layer at z-index -1. In the root stacking
+   context it paints *after* <html>'s background but *before* <body>'s — so
+   any opaque full-page background below it would bury the aurora entirely.
+   Move the base colour up to <html> and clear the page-level fills, letting
+   the light field show through the whole app.
+
+   `.bg-background` (the dashboard shell wrapper) is matched exactly and does
+   NOT catch the header's `bg-background/80`, which is a separate class and
+   is meant to stay a translucent bar. */
+:root[data-theme='aurora'],
+:root[data-theme='prism'] {
+  background-color: var(--background);
+}
+:root[data-theme='aurora'] body,
+:root[data-theme='aurora'] .bg-background,
+:root[data-theme='prism'] body,
+:root[data-theme='prism'] .bg-background {
+  background-color: transparent;
 }
