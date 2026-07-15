@@ -183,8 +183,8 @@ export const FEATURES: Feature[] = [
   },
   {
     icon: Smartphone,
-    title: "Vertical-native",
-    description: "9:16 output, ready for Shorts, Reels and TikTok.",
+    title: "Shorts-first, not shorts-only",
+    description: "Built for 9:16 Shorts, Reels & TikTok — and exports 16:9 widescreen for YouTube.",
   },
   {
     icon: Zap,
@@ -329,8 +329,8 @@ export const NAV_LINKS = [
 export type Stat = { value: string; label: string }
 
 export const STATS: Stat[] = [
-  { value: "6", label: "ready-made templates" },
-  { value: "9:16", label: "vertical-native exports" },
+  { value: "7", label: "ready-made templates" },
+  { value: "9:16 + 16:9", label: "shorts & widescreen" },
   { value: "100%", label: "AI voiceover & captions" },
   { value: "Daily", label: "credits that refill" },
 ]

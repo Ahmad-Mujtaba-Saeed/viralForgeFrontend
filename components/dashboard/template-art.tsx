@@ -10,15 +10,17 @@ type ArtKind =
   | "reaction"
   | "tutorial"
 
+// Prism spectrum — cool jewel gradients with iridescent accents (no orange),
+// so generative thumbnails sit in the Liquid Glass world.
 const PALETTE = [
-  { bg: "linear-gradient(160deg,#2A1E3A,#15131C)", a: "#E8492B" },
-  { bg: "linear-gradient(160deg,#11324A,#0C1A26)", a: "#3FA9F5" },
-  { bg: "linear-gradient(160deg,#3A1320,#1C0C12)", a: "#FF5A38" },
-  { bg: "linear-gradient(160deg,#16302A,#0C1A17)", a: "#1F9E6B" },
-  { bg: "linear-gradient(160deg,#2E2410,#171206)", a: "#F6A14A" },
-  { bg: "linear-gradient(160deg,#1A1430,#0E0B1A)", a: "#8A57D8" },
-  { bg: "linear-gradient(160deg,#0F2E33,#08191C)", a: "#19C2C2" },
-  { bg: "linear-gradient(160deg,#311A14,#1A0D09)", a: "#E8492B" },
+  { bg: "linear-gradient(160deg,#2A2350,#15132A)", a: "#7C5CFF" },
+  { bg: "linear-gradient(160deg,#16305A,#0C1A33)", a: "#5B8CFF" },
+  { bg: "linear-gradient(160deg,#3A1740,#1C0C22)", a: "#FF6FCF" },
+  { bg: "linear-gradient(160deg,#123A38,#08201F)", a: "#3FE0C0" },
+  { bg: "linear-gradient(160deg,#1E2A55,#0E1430)", a: "#8B7CFF" },
+  { bg: "linear-gradient(160deg,#301A44,#170B22)", a: "#A98CFF" },
+  { bg: "linear-gradient(160deg,#0F2E4A,#08192B)", a: "#22D3EE" },
+  { bg: "linear-gradient(160deg,#3A1F55,#1A0D2E)", a: "#FF8AD8" },
 ]
 
 /** Pick a deterministic art kind from a template type string. */

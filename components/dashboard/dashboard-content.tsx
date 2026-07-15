@@ -23,7 +23,7 @@ const quickStarts = [
     sub: "Story · 9:16",
     href: "/dashboard/templates",
     icon: Film,
-    color: "#E8492B",
+    color: "#7C5CFF",
   },
   {
     title: "AI Explainer",

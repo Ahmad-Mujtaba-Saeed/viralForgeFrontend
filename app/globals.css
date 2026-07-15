@@ -621,6 +621,19 @@
     background-clip: text;
     color: transparent;
   }
+
+  /* Opt-in hover lift for interactive glass cards (dashboard, templates,
+     projects). Pairs with the specular edge above for the landing-page feel. */
+  .card-lift {
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease;
+  }
+  .card-lift:hover {
+    transform: translateY(-4px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card-lift { transition: none; }
+    .card-lift:hover { transform: none; }
+  }
 }
 
 @keyframes aurora-drift-a {
@@ -668,6 +681,16 @@
 :root[data-theme='prism'] [data-slot='dropdown-menu-content'] {
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
+}
+
+/* Liquid Glass: give every soft-shadowed surface a lit specular top edge, so
+   the whole app's cards read as physical glass — the same trick the landing
+   uses. Kept as a combined box-shadow so the soft drop shadow is preserved. */
+:root[data-theme='prism'] .shadow-soft {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), var(--shadow);
+}
+:root[data-theme='prism'] .shadow-soft-lg {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), var(--shadow-lg);
 }
 
 /* The aurora field is a fixed layer at z-index -1. In the root stacking

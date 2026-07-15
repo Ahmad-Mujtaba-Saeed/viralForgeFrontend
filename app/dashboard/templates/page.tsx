@@ -284,7 +284,7 @@ export default function TemplatesPage() {
                 key={template.templateType}
                 variants={itemVariants}
                 layout
-                className={cn("group", !template.enabled && "opacity-60")}
+                className={cn("group card-lift", !template.enabled && "opacity-60")}
               >
                 <div className="relative aspect-[16/11] overflow-hidden rounded-2xl" style={{ background: pal.bg }}>
                   <div className="absolute inset-0">

@@ -16,11 +16,10 @@ import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import api from '@/lib/axios'
 
-// Chart mark color — the brand accent, validated against both card surfaces
-// (the dark theme accent #FF5A38 sits above the dark lightness band, so the
-// dark mark uses the nearest passing step instead).
-const BAR_LIGHT = '#E8492B'
-const BAR_DARK = '#F1492C'
+// Chart mark color — the Liquid Glass violet accent, one tone per surface so
+// the mark keeps contrast on both the light and dark card.
+const BAR_LIGHT = '#6D5EF6'
+const BAR_DARK = '#8B7CFF'
 
 type WindowTotals = { events: number; renders: number; cost_usd: number }
 
@@ -241,7 +240,7 @@ function DailySpendChart({ daily }: { daily: { day: string; cost_usd: number }[]
                 <path
                   d={barPath(x, y, barW, h)}
                   className={cn(
-                    'fill-[#E8492B] dark:fill-[#F1492C] transition-opacity',
+                    'fill-[#6D5EF6] dark:fill-[#8B7CFF] transition-opacity',
                     hover !== null && hover !== i && 'opacity-45'
                   )}
                 />
@@ -307,7 +306,7 @@ function BreakdownBars({
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-inset">
             <div
-              className="h-full rounded-full bg-[#E8492B] dark:bg-[#F1492C]"
+              className="h-full rounded-full bg-[#6D5EF6] dark:bg-[#8B7CFF]"
               style={{ width: `${Math.max(1.5, (r.cost / max) * 100)}%` }}
             />
           </div>

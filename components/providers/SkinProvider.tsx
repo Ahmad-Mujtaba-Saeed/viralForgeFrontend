@@ -56,7 +56,8 @@ export function SkinProvider({
   return (
     <SkinContext.Provider value={value}>
       {children}
-      <AmbientBackdrop active={skin === 'aurora' || skin === 'prism'} />
+      {/* Liquid Glass is the only skin, so the prism field is always on. */}
+      <AmbientBackdrop active={skin === 'prism'} />
     </SkinContext.Provider>
   )
 }

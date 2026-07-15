@@ -417,7 +417,13 @@ function Navbar({ scrollY }: { scrollY: MotionValue<number> }) {
 }
 
 /* ============================== Hero =============================== */
-function Hero({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
+function Hero({
+  scrollYProgress,
+  templates,
+}: {
+  scrollYProgress: MotionValue<number>
+  templates: Template[]
+}) {
   const { ready, isAuthenticated, firstName } = useLandingAuth()
 
   // The hero glass slab tilts back, shrinks and fades as you scroll — like a
@@ -483,7 +489,8 @@ function Hero({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
           style={{ color: C.ink2 }}
         >
           Scripting, voiceover, captions, music and the edit — generated, synced
-          and rendered for you. Post-ready in minutes, not weekends.
+          and rendered for you. Built for 9:16 shorts, and exports 16:9
+          widescreen for YouTube too. Post-ready in minutes, not weekends.
         </motion.p>
 
         <motion.div
@@ -517,7 +524,7 @@ function Hero({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
         transition={{ duration: 0.9, delay: 0.3 }}
         className="mx-auto mt-20 max-w-4xl"
       >
-        <AppMock />
+        <AppMock templates={templates} />
       </motion.div>
 
       <motion.a
@@ -540,8 +547,12 @@ function Hero({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
   )
 }
 
-/* A light-glass rendition of the create screen, with a moving specular sweep. */
-function AppMock() {
+/* A light-glass rendition of the create screen, with a moving specular sweep.
+   The template list and the credit cost are pulled from live data, so the
+   mock reflects the real flagship template and its current cost. */
+function AppMock({ templates }: { templates: Template[] }) {
+  const list = (templates.length > 0 ? templates : TEMPLATES).slice(0, 3)
+  const activeCredits = list[0]?.credits ?? 6
   return (
     <div
       className="relative overflow-hidden rounded-[28px] border backdrop-blur-2xl"
@@ -573,7 +584,7 @@ function AppMock() {
             Template
           </div>
           <div className="mt-2.5 space-y-2">
-            {TEMPLATES.slice(0, 3).map((t, i) => {
+            {list.map((t, i) => {
               const Icon = iconFor(t.icon)
               const active = i === 0
               return (
@@ -614,7 +625,7 @@ function AppMock() {
           >
             <span className="text-[13px] font-bold text-white">Generate video</span>
             <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-white/90">
-              <Zap className="h-3.5 w-3.5 fill-current" /> 6 credits
+              <Zap className="h-3.5 w-3.5 fill-current" /> {activeCredits} credits
             </span>
           </div>
         </div>
@@ -681,7 +692,11 @@ function AppMock() {
 }
 
 /* ============================== Stats ============================== */
-function StatsStrip() {
+function StatsStrip({ templates }: { templates: Template[] }) {
+  // Keep the template count honest — reflect however many are actually live.
+  const stats = STATS.map((s, i) =>
+    i === 0 && templates.length > 0 ? { ...s, value: String(templates.length) } : s
+  )
   return (
     <section className="px-4 pb-8 sm:px-6 lg:px-8">
       <motion.div
@@ -691,7 +706,7 @@ function StatsStrip() {
         viewport={{ once: true, margin: "-80px" }}
         className={`mx-auto grid max-w-5xl grid-cols-2 gap-px overflow-hidden lg:grid-cols-4 ${glassCard}`}
       >
-        {STATS.map((s) => (
+        {stats.map((s) => (
           <motion.div key={s.label} variants={rise} className="p-6 text-center">
             <div
               className="font-display text-[30px] font-bold tracking-tight"
@@ -1348,8 +1363,8 @@ export default function LandingLiquidGlass({
       />
 
       <Navbar scrollY={scrollY} />
-      <Hero scrollYProgress={scrollYProgress} />
-      <StatsStrip />
+      <Hero scrollYProgress={scrollYProgress} templates={templates} />
+      <StatsStrip templates={templates} />
       <Templates templates={templates} />
       <HowItWorks />
       <Features />

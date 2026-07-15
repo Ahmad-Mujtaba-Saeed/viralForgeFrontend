@@ -5,10 +5,13 @@
  * and a dark palette in globals.css. So skin × mode = 4 combinations.
  */
 
-export const SKINS = ['editorial', 'aurora', 'prism'] as const
+// Liquid Glass ("prism") is the app's single, locked-in skin. The editorial
+// and aurora palettes remain defined in globals.css but are no longer offered
+// as choices — the whole site wears Liquid Glass, and users only pick light/dark.
+export const SKINS = ['prism'] as const
 export type Skin = (typeof SKINS)[number]
 
-export const DEFAULT_SKIN: Skin = 'editorial'
+export const DEFAULT_SKIN: Skin = 'prism'
 
 /** localStorage key holding the visitor's own choice, which beats the admin default. */
 export const SKIN_STORAGE_KEY = 'vf-skin'
@@ -17,16 +20,6 @@ export const SKIN_META: Record<
   Skin,
   { label: string; desc: string; swatch: string[] }
 > = {
-  editorial: {
-    label: 'Warm Editorial',
-    desc: 'Cream paper, bold display type, a confident orange accent. Calm and print-like.',
-    swatch: ['#FBFAF8', '#1A1916', '#E8492B'],
-  },
-  aurora: {
-    label: 'Aurora Glass',
-    desc: 'Frosted glass floating over a drifting violet–cyan aurora. Deep, luminous, modern.',
-    swatch: ['#08071A', '#7C5CFF', '#22D3EE'],
-  },
   prism: {
     label: 'Liquid Glass',
     desc: 'Bright frosted glass over a soft pastel prism, with iridescent blue–pink–lilac light. Airy and premium.',

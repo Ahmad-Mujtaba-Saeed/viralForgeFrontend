@@ -57,7 +57,7 @@ export function prettyLabel(key: unknown): string {
 
 /** A deterministic color for a voice avatar. */
 export function voiceColor(id: string): string {
-  const palette = ["#E8492B", "#3B6FE0", "#1F9E6B", "#8A57D8", "#F6A14A", "#19C2C2"]
+  const palette = ["#7C5CFF", "#5B8CFF", "#3FE0C0", "#A98CFF", "#FF6FCF", "#22D3EE"]
   let h = 0
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
   return palette[h % palette.length]
