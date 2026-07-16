@@ -132,7 +132,9 @@ export default function ExplainerCreatePage() {
     setSubmitting(true)
     try {
       const res = await api.post('/api/explainer/projects', {
-        title: title.trim(),
+        // The project title column caps at 255 — a long pasted problem
+        // statement still works, it just gets a trimmed display title.
+        title: title.trim().slice(0, 255),
         script: script.trim(),
         aspect_ratio: aspectRatio,
         target_seconds: targetSeconds,
@@ -168,13 +170,19 @@ export default function ExplainerCreatePage() {
 
       <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-border bg-card p-6 shadow-soft">
         <div>
-          <label className="mb-2 block text-[13px] font-semibold text-foreground">Title</label>
-          <input
+          <label className="mb-2 block text-[13px] font-semibold text-foreground">Title or problem to explain</label>
+          <textarea
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="GTA V vs GTA VI — Map Comparison"
-            className={inputCls}
+            rows={2}
+            maxLength={1000}
+            placeholder={'GTA V vs GTA VI — Map Comparison · or paste a problem: "Solve x² + 5x − 24 = 0 by factoring"'}
+            className={`${inputCls} resize-y leading-relaxed`}
           />
+          <p className="mt-1.5 text-xs text-ink3">
+            A topic makes a normal explainer. A math/physics question (optionally with your solving hints) makes a
+            worked-solution video with native equation, geometry and graph scenes.
+          </p>
         </div>
 
         <div>

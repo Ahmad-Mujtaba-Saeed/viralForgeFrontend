@@ -14,6 +14,7 @@ import {
   Swords, BarChart3, Sigma, ListChecks, Grid3x3, BookMarked,
   History, Workflow, ArrowLeftRight, Trophy, Gauge, Quote,
   Smartphone, Images, MapPin, Newspaper,
+  Calculator, Triangle, TrendingUp, Sparkles,
 } from 'lucide-react'
 
 interface Slot {
@@ -67,6 +68,8 @@ interface Storyboard {
   transitions?: string[]
   color_schemes?: Theme[]
   narration_enabled?: boolean
+  auto_visuals?: boolean
+  auto_visuals_auto?: boolean
   music_enabled?: boolean
   captions_enabled?: boolean
   font_pack?: string
@@ -130,6 +133,9 @@ const TEMPLATE_ICON: Record<string, React.ReactNode> = {
   photo_stack: <Images className="h-4 w-4" />,
   map_card: <MapPin className="h-4 w-4" />,
   headline_ticker: <Newspaper className="h-4 w-4" />,
+  math_steps: <Calculator className="h-4 w-4" />,
+  geometry_diagram: <Triangle className="h-4 w-4" />,
+  function_plot: <TrendingUp className="h-4 w-4" />,
 }
 
 const toggleBtn =
@@ -245,6 +251,17 @@ export default function StoryboardPage() {
       await fetchBoard()
     } catch {
       alert('Failed to toggle background music')
+    }
+  }
+
+  const autoVisualsOn = Boolean(board?.auto_visuals)
+
+  const handleToggleAutoVisuals = async () => {
+    try {
+      await api.post(`/api/explainer/projects/${id}/auto-visuals`, { enabled: !autoVisualsOn })
+      await fetchBoard()
+    } catch {
+      alert('Failed to toggle AI visuals')
     }
   }
 
@@ -373,6 +390,14 @@ export default function StoryboardPage() {
           <button onClick={handleToggleCaptions} className={toggleBtn} title="Karaoke word captions synced to the voiceover">
             {captionsOn ? <Captions className="h-4 w-4 text-primary" /> : <CaptionsOff className="h-4 w-4 text-ink3" />}
             Captions {captionsOn ? 'On' : 'Off'}
+          </button>
+          <button
+            onClick={handleToggleAutoVisuals}
+            className={toggleBtn}
+            title="Unfilled image slots are AI-illustrated at render — nothing to upload. Uploads still override."
+          >
+            <Sparkles className={`h-4 w-4 ${autoVisualsOn ? 'text-primary' : 'text-ink3'}`} />
+            AI visuals {autoVisualsOn ? 'On' : 'Off'}
           </button>
           <button onClick={handleReanalyze} className={toggleBtn}>
             <RefreshCw className="h-4 w-4" /> Re-analyze
@@ -854,6 +879,7 @@ function SceneCard({
             slotKey={slotKey}
             slot={scene.slots[slotKey]}
             cameraMoves={cameraMoves}
+            autoVisuals={Boolean(board.auto_visuals)}
             onChange={onChange}
           />
         ))}
@@ -863,13 +889,14 @@ function SceneCard({
 }
 
 function SlotCard({
-  projectId, sceneId, slotKey, slot, cameraMoves, onChange,
+  projectId, sceneId, slotKey, slot, cameraMoves, autoVisuals = false, onChange,
 }: {
   projectId: string
   sceneId: string
   slotKey: string
   slot: Slot
   cameraMoves: string[]
+  autoVisuals?: boolean
   onChange: () => void
 }) {
   const [uploading, setUploading] = useState(false)
@@ -949,6 +976,7 @@ function SlotCard({
   if ([
     'versus', 'chart', 'proscons', 'icons',
     'timeline_nodes', 'steps', 'ranking', 'meter', 'map', 'headlines',
+    'math_steps', 'geometry', 'function_plot',
   ].includes(slot.content_type)) {
     const s = slot as Record<string, any>
     let summary: React.ReactNode = null
@@ -1033,6 +1061,57 @@ function SlotCard({
               {it.source ? <span className="ml-1.5 font-mono text-[10px] uppercase text-ink3">{it.source}</span> : null}
             </div>
           ))}
+        </div>
+      )
+    } else if (slot.content_type === 'math_steps') {
+      summary = (
+        <div className="space-y-0.5 text-sm text-foreground">
+          {(s.steps || []).map((st: any, i: number) => (
+            <div key={i} className="flex items-baseline gap-2">
+              <span className="font-mono text-[10px] text-ink3">{String(i + 1).padStart(2, '0')}</span>
+              <span className={`font-mono ${i === (s.steps || []).length - 1 ? 'font-semibold text-primary' : ''}`}>
+                {st.expr}
+              </span>
+              {st.note ? <span className="text-[10px] uppercase text-ink3">{st.note}</span> : null}
+            </div>
+          ))}
+          <p className="mt-1 text-[10px] uppercase tracking-wide text-ink3">Rendered as an animated worked solution</p>
+        </div>
+      )
+    } else if (slot.content_type === 'geometry') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <span className="font-semibold capitalize text-primary">{String(s.shape || 'figure').replace('_', ' ')}</span>
+          {(s.points || []).some((p: any) => p?.label) ? (
+            <span className="ml-1.5 text-muted-foreground">
+              {(s.points || []).map((p: any) => p?.label).filter(Boolean).join('')}
+            </span>
+          ) : null}
+          {(s.side_labels || []).filter(Boolean).length ? (
+            <p className="mt-1 text-xs text-muted-foreground">Sides: {(s.side_labels || []).filter(Boolean).join(' · ')}</p>
+          ) : null}
+          {(s.angle_marks || []).length ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Angles: {(s.angle_marks || []).map((m: any) => (m?.right ? '90° (right)' : m?.label)).filter(Boolean).join(' · ')}
+            </p>
+          ) : null}
+          {s.radius_label ? <p className="mt-0.5 text-xs text-muted-foreground">{s.radius_label}</p> : null}
+          <p className="mt-1 text-[10px] uppercase tracking-wide text-ink3">Drawn natively — nothing to upload</p>
+        </div>
+      )
+    } else if (slot.content_type === 'function_plot') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <span className="font-mono font-semibold text-primary">y = {s.expression}</span>
+          <span className="ml-1.5 font-mono text-xs text-muted-foreground">
+            x ∈ [{s.x_min ?? -5}, {s.x_max ?? 5}]
+          </span>
+          {(s.marks || []).length ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Marks: {(s.marks || []).map((m: any) => m?.label || `x = ${m?.x}`).join(' · ')}
+            </p>
+          ) : null}
+          <p className="mt-1 text-[10px] uppercase tracking-wide text-ink3">Plotted natively — nothing to upload</p>
         </div>
       )
     } else {
@@ -1124,7 +1203,13 @@ function SlotCard({
           Stock b-roll “{slot.stock_query}” is fetched automatically at render — upload only to override it.
         </p>
       )}
-      {!slot.asset?.url && !slot.stock_query && slot.asset_request?.description && (
+      {!slot.asset?.url && !slot.stock_query && autoVisuals && (
+        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-primary">
+          <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />
+          AI illustrates this automatically at render — upload only to override it.
+        </p>
+      )}
+      {!slot.asset?.url && !slot.stock_query && !autoVisuals && slot.asset_request?.description && (
         <p className="mt-2 flex items-start gap-1.5 text-[11px] text-ink3">
           <ImageIcon className="mt-0.5 h-3 w-3 shrink-0" />
           {slot.asset_request.description}
