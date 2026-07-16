@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import api from '@/lib/axios'
 import { useBilling } from '@/hooks/useBilling'
@@ -14,7 +14,7 @@ import {
   Swords, BarChart3, Sigma, ListChecks, Grid3x3, BookMarked,
   History, Workflow, ArrowLeftRight, Trophy, Gauge, Quote,
   Smartphone, Images, MapPin, Newspaper,
-  Calculator, Triangle, TrendingUp, Sparkles,
+  Calculator, Triangle, TrendingUp, Sparkles, Route,
 } from 'lucide-react'
 
 interface Slot {
@@ -136,6 +136,7 @@ const TEMPLATE_ICON: Record<string, React.ReactNode> = {
   math_steps: <Calculator className="h-4 w-4" />,
   geometry_diagram: <Triangle className="h-4 w-4" />,
   function_plot: <TrendingUp className="h-4 w-4" />,
+  scenario_diagram: <Route className="h-4 w-4" />,
 }
 
 const toggleBtn =
@@ -976,7 +977,7 @@ function SlotCard({
   if ([
     'versus', 'chart', 'proscons', 'icons',
     'timeline_nodes', 'steps', 'ranking', 'meter', 'map', 'headlines',
-    'math_steps', 'geometry', 'function_plot',
+    'math_steps', 'geometry', 'function_plot', 'scenario',
   ].includes(slot.content_type)) {
     const s = slot as Record<string, any>
     let summary: React.ReactNode = null
@@ -1076,6 +1077,24 @@ function SlotCard({
             </div>
           ))}
           <p className="mt-1 text-[10px] uppercase tracking-wide text-ink3">Rendered as an animated worked solution</p>
+        </div>
+      )
+    } else if (slot.content_type === 'scenario') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(s.entities || []).map((e: any, i: number) => (
+              <Fragment key={i}>
+                {i > 0 ? <span className="text-ink3">→</span> : null}
+                <span className="rounded border border-border px-1.5 py-0.5 font-semibold">
+                  {e?.label}
+                  {e?.value ? <span className="ml-1 font-mono text-[10px] text-primary">{e.value}</span> : null}
+                </span>
+              </Fragment>
+            ))}
+            {s.question ? <span className="ml-1 rounded bg-primary/15 px-1.5 py-0.5 font-mono text-xs text-primary">{s.question}</span> : null}
+          </div>
+          <p className="mt-1 text-[10px] uppercase tracking-wide text-ink3">Drawn as an animated setup diagram — nothing to upload</p>
         </div>
       )
     } else if (slot.content_type === 'geometry') {
