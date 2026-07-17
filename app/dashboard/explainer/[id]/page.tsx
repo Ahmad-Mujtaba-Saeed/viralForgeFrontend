@@ -109,6 +109,7 @@ const COMPOSITION_LABELS: Record<string, string> = {
   hybrid: 'Hybrid (AI Auto)',
   canvas_journey: 'Canvas Journey',
   slides: 'Slides',
+  math_board: 'Math Board',
 }
 
 const TEMPLATE_ICON: Record<string, React.ReactNode> = {
@@ -419,7 +420,13 @@ export default function StoryboardPage() {
                 {board.chapter_plan.chapters.map((c) => c.mode).join(' → ')}
               </span>
             ) : null}
+            {board.composition_mode === 'math_board' ? (
+              <span className="ml-2 text-xs text-muted-foreground">
+                solved on one continuous board with a write-along camera — picked automatically for worked math
+              </span>
+            ) : null}
           </div>
+          {board.composition_mode === 'math_board' ? null : (
           <div className="inline-flex overflow-hidden rounded-lg border border-border">
             {(board.composition_modes ?? []).map((mode) => (
               <button
@@ -447,6 +454,7 @@ export default function StoryboardPage() {
               </button>
             ))}
           </div>
+          )}
         </div>
       )}
 
@@ -732,7 +740,9 @@ function FinalRender({ board }: { board: Storyboard }) {
   const current = videos.find((v) => v.aspect === aspect)?.url ?? board.output_url ?? undefined
   return (
     <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-black shadow-soft">
-      <video key={current} src={current} controls className="w-full" />
+      {/* Height-capped: a 9:16 render at w-full would tower ~1.8x the column
+          width; portrait pillarboxes on the black card instead. */}
+      <video key={current} src={current} controls className="mx-auto block max-h-[70vh] w-auto max-w-full" />
       <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3.5">
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">Final render</span>
