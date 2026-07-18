@@ -23,6 +23,10 @@ const TONES = [
 export default function ExplainerCreatePage() {
   const router = useRouter()
   const [title, setTitle] = useState('')
+  // The user's brief for the script writer — how this video should go, not
+  // what it is about. Sent both to the generator and to the project, because
+  // the storyboard composer rewrites the narration and needs it too.
+  const [guide, setGuide] = useState('')
   const [script, setScript] = useState('')
   const [aspectRatio, setAspectRatio] = useState('16:9')
   const [targetSeconds, setTargetSeconds] = useState(60)
@@ -108,6 +112,7 @@ export default function ExplainerCreatePage() {
     try {
       const res = await api.post('/api/explainer/generate-script', {
         title: title.trim(),
+        ...(guide.trim() ? { guide: guide.trim() } : {}),
         target_seconds: targetSeconds,
         aspect_ratio: aspectRatio,
         ...(tone ? { tone } : {}),
@@ -136,6 +141,10 @@ export default function ExplainerCreatePage() {
         // statement still works, it just gets a trimmed display title.
         title: title.trim().slice(0, 255),
         script: script.trim(),
+        // Kept with the project: the storyboard composer rewrites narration
+        // from the script, so it needs the guide too or the user's opening
+        // ("exercise and question number first") is lost on the board.
+        ...(guide.trim() ? { guide: guide.trim() } : {}),
         aspect_ratio: aspectRatio,
         target_seconds: targetSeconds,
         ...(voice ? { tts_voice: voice } : {}),
@@ -186,6 +195,26 @@ export default function ExplainerCreatePage() {
         </div>
 
         <div>
+          <label className="mb-2 block text-[13px] font-semibold text-foreground">
+            Guide for the AI <span className="font-normal text-ink3">— optional</span>
+          </label>
+          <textarea
+            value={guide}
+            onChange={(e) => setGuide(e.target.value)}
+            rows={4}
+            maxLength={2000}
+            placeholder={
+              'Tell the AI how this video should go. e.g. "Start by showing the chapter name — Quadratic Equations. Then read the question out. Solve it by factoring, not the formula. Finish by checking the answer back in the equation."'
+            }
+            className={`${inputCls} resize-y leading-relaxed`}
+          />
+          <p className="mt-1.5 text-xs text-ink3">
+            Your directions for the script — what to open with, what order to teach in, which method to use. The AI
+            writes the script from your title <em>and</em> this guide. Leave it blank and it decides on its own.
+          </p>
+        </div>
+
+        <div>
           <div className="mb-2 flex items-center justify-between gap-2">
             <label className="block text-[13px] font-semibold text-foreground">Script</label>
             <div className="flex items-center gap-2">
@@ -216,7 +245,7 @@ export default function ExplainerCreatePage() {
             value={script}
             onChange={(e) => setScript(e.target.value)}
             rows={10}
-            placeholder="Paste or write your script here — or add a title and click Generate with AI."
+            placeholder="Paste or write your script here — or fill in the title and guide above and click Generate with AI."
             className={`${inputCls} resize-y leading-relaxed`}
           />
           <p className="mt-1.5 text-xs text-ink3">
