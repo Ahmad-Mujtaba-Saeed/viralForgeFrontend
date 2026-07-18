@@ -25,9 +25,22 @@ export function ProcessingStartedDialog({
   const router = useRouter()
 
   return (
-    <div style={{'background':"aliceblue"}}>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        // The panel is portalled to document.body, so a background set on a
+        // wrapper around <Dialog> never reaches it — it has to live here.
+        // The foreground tokens are re-pointed alongside it: the dark themes
+        // set --foreground to near-white, which would leave this dialog's own
+        // title and body text invisible against a light aliceblue panel.
+        style={{
+          background: 'aliceblue',
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
+          '--foreground': '#16142E',
+          '--muted-foreground': '#625C8A',
+        } as React.CSSProperties}
+      >
         <DialogHeader>
           <div className="mx-auto mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-primary">
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -64,6 +77,5 @@ export function ProcessingStartedDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    </div>
   )
 }
