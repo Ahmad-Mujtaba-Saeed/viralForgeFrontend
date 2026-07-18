@@ -25,6 +25,7 @@ export function ProcessingStartedDialog({
   const router = useRouter()
 
   return (
+    <div style={{'background':"aliceblue"}}>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -63,5 +64,6 @@ export function ProcessingStartedDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </div>
   )
 }
