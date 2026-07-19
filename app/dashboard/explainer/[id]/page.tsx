@@ -220,7 +220,7 @@ export default function StoryboardPage() {
   }
 
   const handleReanalyze = async () => {
-    if (!confirm('Re-run analysis? This replaces the current storyboard and uploads.')) return
+    if (!confirm('Re-run analysis? This rebuilds the storyboard — uploads whose scene survives are kept, the rest are removed.')) return
     try {
       await api.post(`/api/explainer/projects/${id}/reanalyze`)
       await fetchBoard()
