@@ -14,6 +14,7 @@ import {
   Star,
   KeyRound,
   Mic,
+  Brain,
   Music,
   Clapperboard,
   LayoutGrid,
@@ -786,6 +787,151 @@ function AdminNarration() {
   )
 }
 
+type LlmState = {
+  model: string
+  options: Record<string, string>
+  vision_capable: string[]
+  effective: Record<string, string>
+}
+
+const LLM_ROLE_LABELS: Record<string, string> = {
+  explainer: 'Script & storyboard',
+  math: 'Maths reasoning',
+  director: 'Canvas director',
+  vlm: 'Vision review',
+  general: 'Clip selection & scripts',
+}
+
+function AdminLlmModel() {
+  const [state, setState] = useState<LlmState | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    api
+      .get('/api/admin/settings')
+      .then((res) => setState(res.data.llm))
+      .catch(() => setMsg({ kind: 'error', text: 'Failed to load AI model settings.' }))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const selectModel = async (model: string) => {
+    if (saving || state?.model === model) return
+    setMsg(null)
+    setSaving(model)
+    try {
+      const res = await api.put('/api/admin/settings', { llm_model: model })
+      setState(res.data.llm)
+      setMsg({
+        kind: 'success',
+        text: model === 'auto' ? 'Reverted to the per-role defaults.' : `All AI calls now use ${model}.`,
+      })
+    } catch {
+      setMsg({ kind: 'error', text: 'Failed to update the AI model.' })
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const choices: Array<{ key: string; label: string }> = state
+    ? [
+        { key: 'auto', label: 'Auto — per-role defaults (recommended)' },
+        ...Object.entries(state.options).map(([key, label]) => ({ key, label })),
+      ]
+    : []
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 }}
+      className="mt-7 rounded-2xl border border-border bg-card p-6 shadow-soft"
+    >
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <Brain className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-[16px] font-semibold text-foreground">AI model</h2>
+          <p className="text-xs text-muted-foreground">
+            Admin only — which OpenAI model powers every scripting, storyboarding and review call.
+            Applies to new renders; queued jobs keep the model they started with.
+          </p>
+        </div>
+      </div>
+
+      {msg && <Banner kind={msg.kind} text={msg.text} />}
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-ink3">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : !state ? (
+        <p className="py-4 text-sm text-ink3">Settings unavailable.</p>
+      ) : (
+        <div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {choices.map(({ key, label }) => {
+              const active = state.model === key
+              const [name, desc] = label.includes('—')
+                ? [label.split('—')[0].trim(), label.split('—').slice(1).join('—').trim()]
+                : [label, '']
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => selectModel(key)}
+                  disabled={!!saving}
+                  className={cn(
+                    'relative flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition-colors',
+                    active ? 'border-primary bg-accent-soft' : 'border-border bg-card hover:border-primary/50',
+                    saving && 'cursor-not-allowed opacity-70'
+                  )}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span className="font-mono text-sm font-semibold text-foreground">{name}</span>
+                    {saving === key ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    ) : active ? (
+                      <Check className="h-4 w-4 text-primary" />
+                    ) : null}
+                  </div>
+                  <span className="text-xs text-ink3">{desc}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-border bg-surface2 p-4">
+            <p className="mb-2 text-xs font-semibold text-foreground">Resolved per call type</p>
+            <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+              {Object.entries(state.effective).map(([role, model]) => (
+                <div key={role} className="flex items-center justify-between gap-3">
+                  <dt className="text-xs text-ink3">{LLM_ROLE_LABELS[role] ?? role}</dt>
+                  <dd className="font-mono text-xs text-foreground">{model}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          {state.model !== 'auto' && !state.vision_capable.includes(state.model) && (
+            <p className="mt-3 text-xs text-warn">
+              <code className="font-mono">{state.model}</code> cannot read images, so vision review keeps
+              its own model — otherwise label placement and frame review would silently fail.
+            </p>
+          )}
+          <p className="mt-3 text-xs text-ink3">
+            &quot;Auto&quot; keeps the tuned per-role defaults from your environment config — a stronger
+            model for the canvas director, a cheap one for bulk scripting. Picking a single model
+            overrides all of them, which raises cost on the high-volume calls.
+          </p>
+        </div>
+      )}
+    </motion.section>
+  )
+}
+
 type MusicState = {
   pixabay_configured: boolean
   credentials: ApiKey[]
@@ -1185,6 +1331,7 @@ export default function SettingsPage() {
       {/* Admin-only settings */}
       {user?.is_admin && <AdminTemplates />}
       {user?.is_admin && <AdminNarration />}
+      {user?.is_admin && <AdminLlmModel />}
       {user?.is_admin && <AdminMusic />}
       {user?.is_admin && <AdminStockFootage />}
       {user?.is_admin && <AdminIntegrations />}
