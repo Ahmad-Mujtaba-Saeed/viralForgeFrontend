@@ -489,7 +489,7 @@ export default function StoryboardPage() {
   const lockedBoardLabel = board.board_styles?.[resolvedBoardStyle]?.label ?? resolvedBoardStyle
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-7xl">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-[26px] font-semibold tracking-tight text-foreground">{board.title}</h1>
@@ -808,62 +808,77 @@ export default function StoryboardPage() {
 
       <StatusBanner board={board} />
 
-      {/* Live style preview + the finished render. While the MP4 still matches
-          the current settings it sits on top and the preview stays collapsed;
-          the moment a look setting changes, the preview takes the top slot and
-          the now-stale video drops below it. */}
-      {(() => {
-        const hasVideo = board.status === 'completed' && Boolean(board.output_url)
-        const stale = hasVideo && Boolean(board.rendered_look) && board.rendered_look !== board.current_look
-        const showPreviewFirst = !hasVideo || stale
+      {/* Storyboard on the left, the watch column on the right: the preview
+          and the finished render ride ALONGSIDE the scenes so a style change
+          and its effect are visible at the same time. The column sticks to the
+          viewport while the storyboard scrolls past it. Below lg the two
+          stack, preview first — on a phone the frame is the thing you want to
+          see before a list of scene cards. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_384px] xl:grid-cols-[minmax(0,1fr)_460px]">
+        <div className="order-last min-w-0 lg:order-first">
+          {board.status !== 'analyzing' && <LintReport report={board.lint_report} />}
 
-        const previewPanel = (
-          <StylePreview
-            board={board}
-            preview={preview}
-            loading={previewLoading}
-            error={previewError}
-            sceneId={previewScene}
-            stale={stale}
-            onScene={(sceneId) => fetchPreview(sceneId)}
-            onRetry={() => fetchPreview(previewScene)}
-          />
-        )
-
-        return showPreviewFirst ? (
-          <>
-            {previewPanel}
-            {hasVideo && <FinalRender board={board} stale={stale} />}
-          </>
-        ) : (
-          <>
-            <FinalRender board={board} stale={false} />
-            {previewPanel}
-          </>
-        )
-      })()}
-
-      {board.status !== 'analyzing' && <LintReport report={board.lint_report} />}
-
-      {board.status === 'analyzing' ? (
-        <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground">
-          <Loader2 className="mb-3 h-6 w-6 animate-spin text-primary" />
-          Breaking your script into scenes…
+          {board.status === 'analyzing' ? (
+            <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground">
+              <Loader2 className="mb-3 h-6 w-6 animate-spin text-primary" />
+              Breaking your script into scenes…
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {board.scenes.map((scene) => (
+                <SceneCard
+                  key={scene.scene_id}
+                  projectId={id}
+                  scene={scene}
+                  board={board}
+                  cameraMoves={board.camera_moves || []}
+                  onChange={fetchBoard}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="space-y-5">
-          {board.scenes.map((scene) => (
-            <SceneCard
-              key={scene.scene_id}
-              projectId={id}
-              scene={scene}
-              board={board}
-              cameraMoves={board.camera_moves || []}
-              onChange={fetchBoard}
-            />
-          ))}
-        </div>
-      )}
+
+        <aside className="order-first min-w-0 lg:order-last lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
+          {/* While the MP4 still matches the current settings it sits on top
+              with the preview beneath; the moment a look setting changes the
+              preview takes the top slot and the stale video drops below it. */}
+          {(() => {
+            const hasVideo = board.status === 'completed' && Boolean(board.output_url)
+            const stale = hasVideo && Boolean(board.rendered_look) && board.rendered_look !== board.current_look
+            const showPreviewFirst = !hasVideo || stale
+
+            const previewPanel = (
+              <StylePreview
+                board={board}
+                preview={preview}
+                loading={previewLoading}
+                error={previewError}
+                sceneId={previewScene}
+                stale={stale}
+                onScene={(sceneId) => fetchPreview(sceneId)}
+                onRetry={() => fetchPreview(previewScene)}
+              />
+            )
+
+            return (
+              <div className="space-y-5">
+                {showPreviewFirst ? (
+                  <>
+                    {previewPanel}
+                    {hasVideo && <FinalRender board={board} stale={stale} />}
+                  </>
+                ) : (
+                  <>
+                    <FinalRender board={board} stale={false} />
+                    {previewPanel}
+                  </>
+                )}
+              </div>
+            )
+          })()}
+        </aside>
+      </div>
 
       {board.scenes.length > 0 && board.status !== 'analyzing' && (
         <div className="sticky bottom-4 mt-8 flex items-center justify-between gap-4 rounded-2xl border border-border bg-card/95 p-4 shadow-soft-lg backdrop-blur">
@@ -1037,17 +1052,14 @@ function StylePreview({
   const ratio = board.aspect_ratio === '9:16' ? '9 / 16' : board.aspect_ratio === '1:1' ? '1 / 1' : '16 / 9'
 
   return (
-    <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-3.5 py-2.5">
-        <div className="flex items-center gap-2 text-sm">
-          <Eye className="h-4 w-4 text-primary" />
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-border px-3.5 py-2.5">
+        <div className="flex min-w-0 items-center gap-2 text-sm">
+          <Eye className="h-4 w-4 shrink-0 text-primary" />
           <span className="font-semibold text-foreground">Style preview</span>
-          <span className="text-xs text-muted-foreground">
-            {stale ? 'your latest changes — not in the render below yet' : 'live frame, no render needed'}
-          </span>
+          {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
         </div>
         <div className="flex items-center gap-2">
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
           <div className="inline-flex items-center gap-1">
             <button
               onClick={() => step(-1)}
@@ -1072,7 +1084,7 @@ function StylePreview({
         </div>
       </div>
 
-      <div className="relative bg-black" style={{ aspectRatio: ratio, maxHeight: '60vh' }}>
+      <div className="relative bg-black" style={{ aspectRatio: ratio, maxHeight: '46vh' }}>
         {preview?.url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -1101,6 +1113,12 @@ function StylePreview({
           </div>
         )}
       </div>
+
+      <p className="px-3.5 py-2 text-[11px] leading-snug text-muted-foreground">
+        {stale
+          ? 'Your latest style changes — the render below is still the older look.'
+          : 'A real frame of this video, no render needed. Change a colour scheme, font, skin or motion and it updates.'}
+      </p>
     </div>
   )
 }
@@ -1111,10 +1129,10 @@ function FinalRender({ board, stale = false }: { board: Storyboard; stale?: bool
   const [aspect, setAspect] = useState(videos[0]?.aspect ?? board.aspect_ratio)
   const current = videos.find((v) => v.aspect === aspect)?.url ?? board.output_url ?? undefined
   return (
-    <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-black shadow-soft">
+    <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-soft">
       {/* Height-capped: a 9:16 render at w-full would tower ~1.8x the column
           width; portrait pillarboxes on the black card instead. */}
-      <video key={current} src={current} controls className="mx-auto block max-h-[70vh] w-auto max-w-full" />
+      <video key={current} src={current} controls className="mx-auto block max-h-[52vh] w-auto max-w-full" />
       <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3.5">
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">Final render</span>
@@ -1140,31 +1158,31 @@ function FinalRender({ board, stale = false }: { board: Storyboard; stale?: bool
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {board.srt_url && (
             <a
               href={board.srt_url}
               download
-              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-inset"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-inset"
             >
-              <Captions className="h-4 w-4" /> SRT
+              <Captions className="h-3.5 w-3.5" /> SRT
             </a>
           )}
           {board.youtube_kit_url && (
             <a
               href={board.youtube_kit_url}
               download
-              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-inset"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-inset"
             >
-              <FileText className="h-4 w-4" /> YouTube kit
+              <FileText className="h-3.5 w-3.5" /> YouTube kit
             </a>
           )}
           <a
             href={current}
             download
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground"
           >
-            <Play className="h-4 w-4" /> Download MP4
+            <Play className="h-3.5 w-3.5" /> MP4
           </a>
         </div>
       </div>
