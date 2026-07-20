@@ -14,7 +14,7 @@ import {
   Swords, BarChart3, Sigma, ListChecks, Grid3x3, BookMarked,
   History, Workflow, ArrowLeftRight, Trophy, Gauge, Quote,
   Smartphone, Images, MapPin, Newspaper,
-  Calculator, Triangle, TrendingUp, Sparkles, Route,
+  Calculator, Triangle, TrendingUp, Sparkles, Route, FileText, Eye, Lock,
 } from 'lucide-react'
 
 interface Slot {
@@ -82,6 +82,12 @@ interface Storyboard {
   skins?: Record<string, { label: string; use_when: string }>
   composition_mode?: string
   composition_modes?: string[]
+  board_style?: string
+  board_style_auto?: string | null
+  board_style_resolved?: string
+  board_styles?: Record<string, { label: string; use_when: string; overrides_theme?: boolean }>
+  current_look?: string
+  rendered_look?: string | null
   chapter_plan?: { chapters?: { id?: string; mode?: string; scene_ids?: string[] }[] } | null
   lint_report?: LintReportData | null
   chapter_chip?: boolean
@@ -89,6 +95,7 @@ interface Storyboard {
   aspect_variants_multiplier?: number
   brand?: { logo_url?: string | null; color?: string | null; color_applied?: boolean }
   srt_url?: string | null
+  youtube_kit_url?: string | null
   thumbnail_url?: string | null
   output_videos?: { aspect: string; label: string; url: string | null }[]
 }
@@ -141,7 +148,7 @@ const TEMPLATE_ICON: Record<string, React.ReactNode> = {
 }
 
 const toggleBtn =
-  'inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-soft transition-colors hover:bg-inset'
+  'inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-soft transition-colors hover:bg-inset disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-card'
 
 export default function StoryboardPage() {
   const { id } = useParams<{ id: string }>()
@@ -153,6 +160,55 @@ export default function StoryboardPage() {
   const [switchingMode, setSwitchingMode] = useState<string | null>(null)
   const [showProcessingModal, setShowProcessingModal] = useState(false)
   const projectProgress = useProjectProgress(id ?? null)
+
+  // Generic in-flight tracker so every settings button gets the same
+  // "yes, your click registered" feedback (spinner + disabled) without a
+  // separate useState per action. Keys are free-form; segmented controls use
+  // "group:value" (e.g. "skin:outline") so a specific option can show its own
+  // spinner while `groupPending` disables its siblings during the request.
+  const [pending, setPending] = useState<Record<string, boolean>>({})
+  const withPending = useCallback(async (key: string, fn: () => Promise<void>) => {
+    setPending((p) => ({ ...p, [key]: true }))
+    try {
+      await fn()
+    } finally {
+      setPending((p) => {
+        const next = { ...p }
+        delete next[key]
+        return next
+      })
+    }
+  }, [])
+  const isPending = (key: string) => Boolean(pending[key])
+  const groupPending = (prefix: string) => Object.keys(pending).some((k) => k.startsWith(`${prefix}:`) && pending[k])
+
+  // Live style preview: one frozen frame of the REAL composition, refreshed
+  // whenever a look-affecting setting changes. `previewScene` lets the user
+  // look at a different beat; the backend caches by look+scene, so flipping
+  // between styles you have already viewed comes back instantly.
+  const [preview, setPreview] = useState<{ url: string; scene_id: string } | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [previewScene, setPreviewScene] = useState<string | null>(null)
+
+  const fetchPreview = useCallback(async (sceneId?: string | null) => {
+    setPreviewLoading(true)
+    setPreviewError(null)
+    try {
+      const res = await api.post(`/api/explainer/projects/${id}/preview`, sceneId ? { scene_id: sceneId } : {})
+      const data = res.data?.data
+      if (data?.url) {
+        // Cache-bust: the PNG path is fingerprinted, but a re-render of the
+        // same fingerprint (after a scene edit) reuses the filename.
+        setPreview({ url: `${data.url}?v=${Date.now()}`, scene_id: data.scene_id })
+        setPreviewScene(data.scene_id)
+      }
+    } catch (err: any) {
+      setPreviewError(err?.response?.data?.message || 'Preview unavailable')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }, [id])
 
   const baseCost = costFor('ai_explainer_video')
   // The §10.6 aspect-variant bundle multiplies the render charge.
@@ -196,6 +252,20 @@ export default function StoryboardPage() {
     return () => cleanups.forEach((cleanup) => cleanup?.())
   }, [projectProgress, fetchBoard])
 
+  // Refresh the still whenever the look changes. `current_look` is a backend
+  // hash of exactly the settings that alter a frame, so this fires on a scheme
+  // /font/skin/motion/board switch and stays quiet for music or voice toggles.
+  // Skipped while analysis or a render owns the pipeline.
+  const currentLook = board?.current_look
+  const previewable = (board?.scenes.length ?? 0) > 0 && board?.status !== 'analyzing' && board?.status !== 'processing'
+  const previewSceneRef = useRef<string | null>(null)
+  previewSceneRef.current = previewScene
+
+  useEffect(() => {
+    if (!currentLook || !previewable) return
+    fetchPreview(previewSceneRef.current)
+  }, [currentLook, previewable, fetchPreview])
+
   const handleRender = async () => {
     // Credit gate (server enforces this too).
     if (!canAffordRender) {
@@ -221,127 +291,165 @@ export default function StoryboardPage() {
 
   const handleReanalyze = async () => {
     if (!confirm('Re-run analysis? This rebuilds the storyboard — uploads whose scene survives are kept, the rest are removed.')) return
-    try {
-      await api.post(`/api/explainer/projects/${id}/reanalyze`)
-      await fetchBoard()
-    } catch {
-      alert('Failed to re-analyze')
-    }
+    await withPending('reanalyze', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/reanalyze`)
+        await fetchBoard()
+      } catch {
+        alert('Failed to re-analyze')
+      }
+    })
   }
 
   const handleShuffleTheme = async () => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/shuffle-theme`)
-      await fetchBoard()
-    } catch {
-      alert('Failed to shuffle theme')
-    }
+    await withPending('shuffle-theme', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/shuffle-theme`)
+        await fetchBoard()
+      } catch {
+        alert('Failed to shuffle theme')
+      }
+    })
   }
 
   const handleToggleNarration = async () => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/narration`, { enabled: !(board?.narration_enabled ?? true) })
-      await fetchBoard()
-    } catch {
-      alert('Failed to toggle voiceover')
-    }
+    await withPending('narration', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/narration`, { enabled: !(board?.narration_enabled ?? true) })
+        await fetchBoard()
+      } catch {
+        alert('Failed to toggle voiceover')
+      }
+    })
   }
 
   const handleToggleMusic = async () => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/music`, { enabled: !(board?.music_enabled ?? true) })
-      await fetchBoard()
-    } catch {
-      alert('Failed to toggle background music')
-    }
+    await withPending('music', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/music`, { enabled: !(board?.music_enabled ?? true) })
+        await fetchBoard()
+      } catch {
+        alert('Failed to toggle background music')
+      }
+    })
   }
 
   const autoVisualsOn = Boolean(board?.auto_visuals)
 
   const handleToggleAutoVisuals = async () => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/auto-visuals`, { enabled: !autoVisualsOn })
-      await fetchBoard()
-    } catch {
-      alert('Failed to toggle AI visuals')
-    }
+    await withPending('auto-visuals', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/auto-visuals`, { enabled: !autoVisualsOn })
+        await fetchBoard()
+      } catch {
+        alert('Failed to toggle AI visuals')
+      }
+    })
   }
 
   const captionsOn = board?.captions_enabled ?? board?.aspect_ratio === '9:16'
 
   const handleToggleCaptions = async () => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/captions`, { enabled: !captionsOn })
-      await fetchBoard()
-    } catch {
-      alert('Failed to toggle captions')
-    }
+    await withPending('captions', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/captions`, { enabled: !captionsOn })
+        await fetchBoard()
+      } catch {
+        alert('Failed to toggle captions')
+      }
+    })
   }
 
   const handleFontPack = async (pack: string) => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/font-pack`, { pack })
-      await fetchBoard()
-    } catch {
-      alert('Failed to switch typography')
-    }
+    await withPending(`font-pack:${pack}`, async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/font-pack`, { pack })
+        await fetchBoard()
+      } catch {
+        alert('Failed to switch typography')
+      }
+    })
   }
 
   const handleMotionStyle = async (style: string) => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/motion-style`, { style })
-      await fetchBoard()
-    } catch {
-      alert('Failed to switch motion style')
-    }
+    await withPending(`motion-style:${style}`, async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/motion-style`, { style })
+        await fetchBoard()
+      } catch {
+        alert('Failed to switch motion style')
+      }
+    })
   }
 
   const handleSkin = async (skin: string) => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/skin`, { skin })
-      await fetchBoard()
-    } catch {
-      alert('Failed to switch skin')
-    }
+    await withPending(`skin:${skin}`, async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/skin`, { skin })
+        await fetchBoard()
+      } catch {
+        alert('Failed to switch skin')
+      }
+    })
   }
 
   const handleToggleChapterChip = async () => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/chapter-chip`, { enabled: !(board?.chapter_chip ?? false) })
-      await fetchBoard()
-    } catch {
-      alert('Failed to toggle chapter chip')
-    }
+    await withPending('chapter-chip', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/chapter-chip`, { enabled: !(board?.chapter_chip ?? false) })
+        await fetchBoard()
+      } catch {
+        alert('Failed to toggle chapter chip')
+      }
+    })
   }
 
   const handleToggleAspectVariants = async () => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/aspect-variants`, { enabled: !(board?.aspect_variants ?? false) })
-      await fetchBoard()
-    } catch {
-      alert('Failed to toggle aspect variants')
-    }
+    await withPending('aspect-variants', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/aspect-variants`, { enabled: !(board?.aspect_variants ?? false) })
+        await fetchBoard()
+      } catch {
+        alert('Failed to toggle aspect variants')
+      }
+    })
   }
 
   const handleBrandLogo = async (file: File | null, removeLogo = false) => {
     const fd = new FormData()
     if (file) fd.append('logo', file)
     if (removeLogo) fd.append('remove_logo', '1')
-    try {
-      await api.post(`/api/explainer/projects/${id}/brand`, fd)
-      await fetchBoard()
-    } catch {
-      alert('Failed to update brand logo')
-    }
+    await withPending('brand-logo', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/brand`, fd)
+        await fetchBoard()
+      } catch {
+        alert('Failed to update brand logo')
+      }
+    })
   }
 
   const handleBrandColor = async (color: string) => {
-    try {
-      await api.post(`/api/explainer/projects/${id}/brand`, { color })
-      await fetchBoard()
-    } catch {
-      alert('Failed to update brand color')
-    }
+    await withPending('brand-color', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/brand`, { color })
+        await fetchBoard()
+      } catch {
+        alert('Failed to update brand color')
+      }
+    })
+  }
+
+  const handleBoardStyle = async (style: string) => {
+    if (style === (board?.board_style ?? 'auto')) return
+    await withPending(`board-style:${style}`, async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/board-style`, { board_style: style })
+        await fetchBoard()
+      } catch {
+        alert('Failed to switch board style')
+      }
+    })
   }
 
   const handleCompositionMode = async (mode: string) => {
@@ -370,6 +478,16 @@ export default function StoryboardPage() {
     return <div className="p-10 text-center text-muted-foreground">Project not found.</div>
   }
 
+  // Chalk and notebook boards ship a FIXED palette that replaces the video's
+  // theme wholesale (board/boardTheme.ts), so the colour scheme controls would
+  // be lying if they stayed live. The registry marks which styles do this —
+  // the UI does not hardcode the list.
+  const resolvedBoardStyle = board.board_style_resolved ?? 'slate'
+  const themeLocked =
+    board.composition_mode === 'math_board' &&
+    Boolean(board.board_styles?.[resolvedBoardStyle]?.overrides_theme)
+  const lockedBoardLabel = board.board_styles?.[resolvedBoardStyle]?.label ?? resolvedBoardStyle
+
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -381,28 +499,51 @@ export default function StoryboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={handleToggleNarration} className={toggleBtn} title="AI voiceover">
-            {(board.narration_enabled ?? true) ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4 text-ink3" />}
+          <button onClick={handleToggleNarration} disabled={isPending('narration')} className={toggleBtn} title="AI voiceover">
+            {isPending('narration') ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : (board.narration_enabled ?? true) ? (
+              <Volume2 className="h-4 w-4 text-primary" />
+            ) : (
+              <VolumeX className="h-4 w-4 text-ink3" />
+            )}
             Voiceover {(board.narration_enabled ?? true) ? 'On' : 'Off'}
           </button>
-          <button onClick={handleToggleMusic} className={toggleBtn} title="Curated background music (by scene mood)">
-            {(board.music_enabled ?? true) ? <Music className="h-4 w-4 text-primary" /> : <Music2 className="h-4 w-4 text-ink3" />}
+          <button onClick={handleToggleMusic} disabled={isPending('music')} className={toggleBtn} title="Curated background music (by scene mood)">
+            {isPending('music') ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : (board.music_enabled ?? true) ? (
+              <Music className="h-4 w-4 text-primary" />
+            ) : (
+              <Music2 className="h-4 w-4 text-ink3" />
+            )}
             Music {(board.music_enabled ?? true) ? 'On' : 'Off'}
           </button>
-          <button onClick={handleToggleCaptions} className={toggleBtn} title="Karaoke word captions synced to the voiceover">
-            {captionsOn ? <Captions className="h-4 w-4 text-primary" /> : <CaptionsOff className="h-4 w-4 text-ink3" />}
+          <button onClick={handleToggleCaptions} disabled={isPending('captions')} className={toggleBtn} title="Karaoke word captions synced to the voiceover">
+            {isPending('captions') ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : captionsOn ? (
+              <Captions className="h-4 w-4 text-primary" />
+            ) : (
+              <CaptionsOff className="h-4 w-4 text-ink3" />
+            )}
             Captions {captionsOn ? 'On' : 'Off'}
           </button>
           <button
             onClick={handleToggleAutoVisuals}
+            disabled={isPending('auto-visuals')}
             className={toggleBtn}
             title="Unfilled image slots are AI-illustrated at render — nothing to upload. Uploads still override."
           >
-            <Sparkles className={`h-4 w-4 ${autoVisualsOn ? 'text-primary' : 'text-ink3'}`} />
+            {isPending('auto-visuals') ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : (
+              <Sparkles className={`h-4 w-4 ${autoVisualsOn ? 'text-primary' : 'text-ink3'}`} />
+            )}
             AI visuals {autoVisualsOn ? 'On' : 'Off'}
           </button>
-          <button onClick={handleReanalyze} className={toggleBtn}>
-            <RefreshCw className="h-4 w-4" /> Re-analyze
+          <button onClick={handleReanalyze} disabled={isPending('reanalyze')} className={toggleBtn}>
+            <RefreshCw className={`h-4 w-4 ${isPending('reanalyze') ? 'animate-spin' : ''}`} /> Re-analyze
           </button>
         </div>
       </header>
@@ -426,7 +567,45 @@ export default function StoryboardPage() {
               </span>
             ) : null}
           </div>
-          {board.composition_mode === 'math_board' ? null : (
+          {board.composition_mode === 'math_board' ? (
+            board.board_styles && Object.keys(board.board_styles).length > 0 ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Board:
+                  {(board.board_style ?? 'auto') === 'auto' && board.board_style_auto ? (
+                    <span className="ml-1 text-xs">({board.board_styles[board.board_style_auto]?.label ?? board.board_style_auto})</span>
+                  ) : null}
+                </span>
+                <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                  {['auto', ...Object.keys(board.board_styles)].map((style) => (
+                    <button
+                      key={style}
+                      onClick={() => handleBoardStyle(style)}
+                      disabled={groupPending('board-style')}
+                      title={
+                        style === 'auto'
+                          ? 'Match the board to the topic: proofs get the chalkboard, worked problems the notebook'
+                          : board.board_styles?.[style]?.use_when
+                      }
+                      className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
+                        (board.board_style ?? 'auto') === style
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-card text-muted-foreground hover:bg-inset'
+                      }`}
+                    >
+                      {isPending(`board-style:${style}`) ? (
+                        <Loader2 className="mx-3 h-4 w-4 animate-spin" />
+                      ) : style === 'auto' ? (
+                        'Auto'
+                      ) : (
+                        board.board_styles?.[style]?.label ?? style
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null
+          ) : (
           <div className="inline-flex overflow-hidden rounded-lg border border-border">
             {(board.composition_modes ?? []).map((mode) => (
               <button
@@ -459,7 +638,9 @@ export default function StoryboardPage() {
       )}
 
       {board.theme && (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
+        <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft ${
+          themeLocked ? 'opacity-60' : ''
+        }`}>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               {[board.theme.bg_to, board.theme.accent, board.theme.accent2, board.theme.text].map((c, i) => (
@@ -469,6 +650,12 @@ export default function StoryboardPage() {
             <div className="text-sm">
               <span className="text-muted-foreground">Color scheme: </span>
               <span className="font-semibold text-foreground">{board.theme.label}</span>
+              {themeLocked && (
+                <span className="ml-2 inline-flex items-center gap-1 text-xs text-warn" title={`The ${lockedBoardLabel} board uses its own fixed palette, so the video's colour scheme has no effect. Switch the board to Slate to use it.`}>
+                  <Lock className="h-3 w-3" />
+                  overridden by the {lockedBoardLabel} board
+                </span>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -480,14 +667,21 @@ export default function StoryboardPage() {
                     <button
                       key={pack}
                       onClick={() => handleFontPack(pack)}
+                      disabled={groupPending('font-pack')}
                       title={pack === 'auto' ? 'Let the system pick the typography' : board.font_packs?.[pack]?.use_when}
-                      className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                      className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
                         (board.font_pack ?? 'auto') === pack
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-card text-muted-foreground hover:bg-inset'
                       }`}
                     >
-                      {pack === 'auto' ? 'Auto' : board.font_packs?.[pack]?.label ?? pack}
+                      {isPending(`font-pack:${pack}`) ? (
+                        <Loader2 className="mx-3 h-4 w-4 animate-spin" />
+                      ) : pack === 'auto' ? (
+                        'Auto'
+                      ) : (
+                        board.font_packs?.[pack]?.label ?? pack
+                      )}
                     </button>
                   ))}
                 </div>
@@ -495,9 +689,11 @@ export default function StoryboardPage() {
             )}
             <button
               onClick={handleShuffleTheme}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-inset"
+              disabled={isPending('shuffle-theme') || themeLocked}
+              title={themeLocked ? `The ${lockedBoardLabel} board paints with its own fixed palette — switch it to Slate to use colour schemes.` : undefined}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-inset disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-card"
             >
-              <Shuffle className="h-4 w-4" /> Shuffle colors
+              <Shuffle className={`h-4 w-4 ${isPending('shuffle-theme') ? 'animate-spin' : ''}`} /> Shuffle colors
             </button>
           </div>
         </div>
@@ -518,14 +714,21 @@ export default function StoryboardPage() {
                   <button
                     key={style}
                     onClick={() => handleMotionStyle(style)}
+                    disabled={groupPending('motion-style')}
                     title={style === 'auto' ? 'Let the AI match the motion to the topic' : board.motion_styles?.[style]?.use_when}
-                    className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                    className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
                       (board.motion_style ?? 'auto') === style
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-card text-muted-foreground hover:bg-inset'
                     }`}
                   >
-                    {style === 'auto' ? 'Auto' : board.motion_styles?.[style]?.label ?? style}
+                    {isPending(`motion-style:${style}`) ? (
+                      <Loader2 className="mx-3 h-4 w-4 animate-spin" />
+                    ) : style === 'auto' ? (
+                      'Auto'
+                    ) : (
+                      board.motion_styles?.[style]?.label ?? style
+                    )}
                   </button>
                 ))}
               </div>
@@ -544,14 +747,21 @@ export default function StoryboardPage() {
                   <button
                     key={skin}
                     onClick={() => handleSkin(skin)}
+                    disabled={groupPending('skin')}
                     title={skin === 'auto' ? 'Let the AI pick the surface treatment' : board.skins?.[skin]?.use_when}
-                    className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                    className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
                       (board.skin ?? 'auto') === skin
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-card text-muted-foreground hover:bg-inset'
                     }`}
                   >
-                    {skin === 'auto' ? 'Auto' : board.skins?.[skin]?.label ?? skin}
+                    {isPending(`skin:${skin}`) ? (
+                      <Loader2 className="mx-3 h-4 w-4 animate-spin" />
+                    ) : skin === 'auto' ? (
+                      'Auto'
+                    ) : (
+                      board.skins?.[skin]?.label ?? skin
+                    )}
                   </button>
                 ))}
               </div>
@@ -562,20 +772,35 @@ export default function StoryboardPage() {
 
       {/* Packaging (§10.3–10.7): brand kit, chapter chip, aspect variants. */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
-        <BrandControls board={board} onLogo={handleBrandLogo} onColor={handleBrandColor} />
+        <BrandControls
+          board={board}
+          onLogo={handleBrandLogo}
+          onColor={handleBrandColor}
+          logoPending={isPending('brand-logo')}
+          colorPending={isPending('brand-color')}
+        />
         <div className="flex flex-wrap items-center gap-2">
           {board.composition_mode === 'hybrid' && (
-            <button onClick={handleToggleChapterChip} className={toggleBtn} title="Show a 02 / 06 chapter counter in the corner">
-              <BookMarked className={`h-4 w-4 ${board.chapter_chip ? 'text-primary' : 'text-ink3'}`} />
+            <button onClick={handleToggleChapterChip} disabled={isPending('chapter-chip')} className={toggleBtn} title="Show a 02 / 06 chapter counter in the corner">
+              {isPending('chapter-chip') ? (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <BookMarked className={`h-4 w-4 ${board.chapter_chip ? 'text-primary' : 'text-ink3'}`} />
+              )}
               Chapter chip {board.chapter_chip ? 'On' : 'Off'}
             </button>
           )}
           <button
             onClick={handleToggleAspectVariants}
+            disabled={isPending('aspect-variants')}
             className={toggleBtn}
             title={`Render 16:9 + 9:16 + 1:1 in one go (${board.aspect_variants_multiplier ?? 2.5}× credits)`}
           >
-            <Columns2 className={`h-4 w-4 ${board.aspect_variants ? 'text-primary' : 'text-ink3'}`} />
+            {isPending('aspect-variants') ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : (
+              <Columns2 className={`h-4 w-4 ${board.aspect_variants ? 'text-primary' : 'text-ink3'}`} />
+            )}
             All aspects {board.aspect_variants ? 'On' : 'Off'}
           </button>
         </div>
@@ -583,9 +808,40 @@ export default function StoryboardPage() {
 
       <StatusBanner board={board} />
 
-      {board.status === 'completed' && board.output_url && (
-        <FinalRender board={board} />
-      )}
+      {/* Live style preview + the finished render. While the MP4 still matches
+          the current settings it sits on top and the preview stays collapsed;
+          the moment a look setting changes, the preview takes the top slot and
+          the now-stale video drops below it. */}
+      {(() => {
+        const hasVideo = board.status === 'completed' && Boolean(board.output_url)
+        const stale = hasVideo && Boolean(board.rendered_look) && board.rendered_look !== board.current_look
+        const showPreviewFirst = !hasVideo || stale
+
+        const previewPanel = (
+          <StylePreview
+            board={board}
+            preview={preview}
+            loading={previewLoading}
+            error={previewError}
+            sceneId={previewScene}
+            stale={stale}
+            onScene={(sceneId) => fetchPreview(sceneId)}
+            onRetry={() => fetchPreview(previewScene)}
+          />
+        )
+
+        return showPreviewFirst ? (
+          <>
+            {previewPanel}
+            {hasVideo && <FinalRender board={board} stale={stale} />}
+          </>
+        ) : (
+          <>
+            <FinalRender board={board} stale={false} />
+            {previewPanel}
+          </>
+        )
+      })()}
 
       {board.status !== 'analyzing' && <LintReport report={board.lint_report} />}
 
@@ -631,6 +887,8 @@ export default function StoryboardPage() {
           >
             {board.status === 'processing' ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Rendering {board.progress}%</>
+            ) : rendering ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Starting render…</>
             ) : !canAffordRender ? (
               <><Film className="h-4 w-4" /> {hasSubscription ? 'Get credits' : 'View plans'}</>
             ) : (
@@ -672,11 +930,13 @@ function StatusBanner({ board }: { board: Storyboard }) {
 /** Brand kit controls (§10.4): logo watermark upload + brand colour, with the
  *  contrast notice when the colour was ignored. */
 function BrandControls({
-  board, onLogo, onColor,
+  board, onLogo, onColor, logoPending, colorPending,
 }: {
   board: Storyboard
   onLogo: (file: File | null, remove?: boolean) => void
   onColor: (color: string) => void
+  logoPending?: boolean
+  colorPending?: boolean
 }) {
   const logoRef = useRef<HTMLInputElement>(null)
   const [color, setColor] = useState(board.brand?.color ?? '#ffffff')
@@ -690,13 +950,23 @@ function BrandControls({
         <span className="inline-flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={board.brand.logo_url} alt="logo" className="h-7 max-w-24 rounded border border-border bg-inset object-contain p-0.5" />
-          <button onClick={() => onLogo(null, true)} className="text-xs text-ink3 hover:text-destructive" title="Remove logo">
-            <X className="h-3.5 w-3.5" />
+          <button
+            onClick={() => onLogo(null, true)}
+            disabled={logoPending}
+            className="text-xs text-ink3 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-60"
+            title="Remove logo"
+          >
+            {logoPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
           </button>
         </span>
       ) : (
-        <button onClick={() => logoRef.current?.click()} className="text-sm font-semibold text-primary hover:underline">
-          + Logo watermark
+        <button
+          onClick={() => logoRef.current?.click()}
+          disabled={logoPending}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+        >
+          {logoPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          {logoPending ? 'Uploading…' : '+ Logo watermark'}
         </button>
       )}
       <input
@@ -715,11 +985,17 @@ function BrandControls({
           type="color"
           value={color}
           onChange={(e) => setColor(e.target.value)}
-          className="h-7 w-9 cursor-pointer rounded border border-border bg-card"
+          disabled={colorPending}
+          className="h-7 w-9 cursor-pointer rounded border border-border bg-card disabled:cursor-not-allowed disabled:opacity-60"
           title="Brand colour (overrides the accent when readable)"
         />
         {color.toLowerCase() !== (board.brand?.color ?? '').toLowerCase() && (
-          <button onClick={() => onColor(color)} className="text-xs font-semibold text-primary hover:underline">
+          <button
+            onClick={() => onColor(color)}
+            disabled={colorPending}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+          >
+            {colorPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
             Apply
           </button>
         )}
@@ -733,8 +1009,104 @@ function BrandControls({
   )
 }
 
+/**
+ * Live style preview: one frame of the REAL composition, frozen server-side
+ * with the project's current settings. It is not a mock-up — the still comes
+ * out of the same shot list the MP4 render consumes, so what you see is what
+ * you will get. Refreshes itself whenever a look setting changes.
+ */
+function StylePreview({
+  board, preview, loading, error, sceneId, stale, onScene, onRetry,
+}: {
+  board: Storyboard
+  preview: { url: string; scene_id: string } | null
+  loading: boolean
+  error: string | null
+  sceneId: string | null
+  stale: boolean
+  onScene: (sceneId: string) => void
+  onRetry: () => void
+}) {
+  const scenes = board.scenes
+  const index = Math.max(0, scenes.findIndex((s) => s.scene_id === (sceneId ?? preview?.scene_id)))
+  const step = (delta: number) => {
+    const next = scenes[index + delta]
+    if (next) onScene(next.scene_id)
+  }
+  // Reserve the frame's real shape so the panel doesn't jolt while loading.
+  const ratio = board.aspect_ratio === '9:16' ? '9 / 16' : board.aspect_ratio === '1:1' ? '1 / 1' : '16 / 9'
+
+  return (
+    <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-3.5 py-2.5">
+        <div className="flex items-center gap-2 text-sm">
+          <Eye className="h-4 w-4 text-primary" />
+          <span className="font-semibold text-foreground">Style preview</span>
+          <span className="text-xs text-muted-foreground">
+            {stale ? 'your latest changes — not in the render below yet' : 'live frame, no render needed'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+          <div className="inline-flex items-center gap-1">
+            <button
+              onClick={() => step(-1)}
+              disabled={loading || index <= 0}
+              className="rounded-md border border-border bg-card px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-inset disabled:opacity-40"
+              title="Preview the previous scene"
+            >
+              ‹
+            </button>
+            <span className="min-w-16 text-center text-xs text-muted-foreground">
+              Scene {index + 1}/{scenes.length}
+            </span>
+            <button
+              onClick={() => step(1)}
+              disabled={loading || index >= scenes.length - 1}
+              className="rounded-md border border-border bg-card px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-inset disabled:opacity-40"
+              title="Preview the next scene"
+            >
+              ›
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative bg-black" style={{ aspectRatio: ratio, maxHeight: '60vh' }}>
+        {preview?.url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={preview.url}
+            alt="Style preview"
+            className={`mx-auto block h-full w-full object-contain transition-opacity duration-200 ${loading ? 'opacity-40' : 'opacity-100'}`}
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+            {loading ? (
+              <>
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                Rendering a preview frame…
+              </>
+            ) : error ? (
+              <>
+                <AlertTriangle className="h-5 w-5 text-warn" />
+                <span className="px-6 text-center text-xs">{error}</span>
+                <button onClick={onRetry} className="text-xs font-semibold text-primary hover:underline">
+                  Try again
+                </button>
+              </>
+            ) : (
+              <span className="text-xs">No preview yet.</span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /** Final render block with the §10.6 aspect switcher + §10.7 SRT download. */
-function FinalRender({ board }: { board: Storyboard }) {
+function FinalRender({ board, stale = false }: { board: Storyboard; stale?: boolean }) {
   const videos = (board.output_videos ?? []).filter((v) => v.url)
   const [aspect, setAspect] = useState(videos[0]?.aspect ?? board.aspect_ratio)
   const current = videos.find((v) => v.aspect === aspect)?.url ?? board.output_url ?? undefined
@@ -746,6 +1118,12 @@ function FinalRender({ board }: { board: Storyboard }) {
       <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3.5">
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">Final render</span>
+          {stale && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-warn/10 px-2.5 py-0.5 text-xs font-bold text-warn">
+              <AlertTriangle className="h-3 w-3" />
+              style changed since this render
+            </span>
+          )}
           {videos.length > 1 && (
             <div className="inline-flex overflow-hidden rounded-lg border border-border">
               {videos.map((v) => (
@@ -770,6 +1148,15 @@ function FinalRender({ board }: { board: Storyboard }) {
               className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-inset"
             >
               <Captions className="h-4 w-4" /> SRT
+            </a>
+          )}
+          {board.youtube_kit_url && (
+            <a
+              href={board.youtube_kit_url}
+              download
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-inset"
+            >
+              <FileText className="h-4 w-4" /> YouTube kit
             </a>
           )}
           <a
@@ -911,6 +1298,7 @@ function SlotCard({
   onChange: () => void
 }) {
   const [uploading, setUploading] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const updateCameraMove = async (move: string) => {
@@ -942,11 +1330,14 @@ function SlotCard({
   }
 
   const remove = async () => {
+    setRemoving(true)
     try {
       await api.delete(`/api/explainer/projects/${projectId}/scenes/${sceneId}/slots/${slotKey}/asset`)
       await onChange()
     } catch {
       alert('Failed to remove asset')
+    } finally {
+      setRemoving(false)
     }
   }
 
@@ -1198,9 +1589,10 @@ function SlotCard({
           )}
           <button
             onClick={remove}
-            className="absolute right-1.5 top-1.5 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+            disabled={removing}
+            className="absolute right-1.5 top-1.5 rounded-full bg-black/70 p-1 text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-70"
           >
-            <X className="h-3.5 w-3.5" />
+            {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
           </button>
         </div>
       ) : (
