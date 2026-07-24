@@ -4,12 +4,14 @@ import {
   createProject as createProjectThunk,
   fetchProjectById as fetchProjectByIdThunk,
   fetchProjects as fetchProjectsThunk,
+  fetchVideos as fetchVideosThunk,
   processProject as processProjectThunk,
   uploadProjectVideo as uploadProjectVideoThunk,
   updateProject as updateProjectThunk,
   uploadProjectSettingFile as uploadProjectSettingFileThunk,
   deleteProject as deleteProjectThunk,
   Project,
+  PageQuery,
 } from '@/store/projectSlice'
 
 export function useProject() {
@@ -41,9 +43,19 @@ export function useProject() {
     [dispatch]
   )
 
-  const fetchProjects = useCallback(async () => {
-    return await dispatch(fetchProjectsThunk()).unwrap()
-  }, [dispatch])
+  const fetchProjects = useCallback(
+    async (arg?: PageQuery) => {
+      return await dispatch(fetchProjectsThunk(arg ?? {})).unwrap()
+    },
+    [dispatch]
+  )
+
+  const fetchVideos = useCallback(
+    async (arg?: PageQuery) => {
+      return await dispatch(fetchVideosThunk(arg ?? {})).unwrap()
+    },
+    [dispatch]
+  )
 
   const fetchProjectById = useCallback(
     async (projectId: number | string) => {
@@ -81,6 +93,7 @@ export function useProject() {
     processProject,
     updateProject,
     fetchProjects,
+    fetchVideos,
     fetchProjectById,
     deleteProject,
   }

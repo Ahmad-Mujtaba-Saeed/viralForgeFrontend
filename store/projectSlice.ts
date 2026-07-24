@@ -31,31 +31,67 @@ export interface Project {
   updated_at?: string | null
 }
 
+export interface PageMeta {
+  current_page: number
+  last_page: number
+  per_page: number
+  total: number
+}
+
+/** Args shared by the paginated list thunks. `append` concatenates the page
+ *  onto the existing list (Load more) instead of replacing it. */
+export interface PageQuery {
+  page?: number
+  perPage?: number
+  search?: string
+  append?: boolean
+}
+
 interface ProjectState {
   currentProject: Project | null
   projects: Project[]
+  projectsMeta: PageMeta | null
+  videos: Project[]
+  videosMeta: PageMeta | null
   isCreating: boolean
   isUploading: boolean
   isProcessing: boolean
   isUpdating: boolean
   isFetching: boolean
   isFetchingProjects: boolean
+  isFetchingVideos: boolean
   error: string | null
   fetchProjectsError: string | null
+  fetchVideosError: string | null
 }
 
 const initialState: ProjectState = {
   currentProject: null,
   projects: [],
+  projectsMeta: null,
+  videos: [],
+  videosMeta: null,
   isCreating: false,
   isUploading: false,
   isProcessing: false,
   isUpdating: false,
   isFetching: false,
   isFetchingProjects: false,
+  isFetchingVideos: false,
   error: null,
   fetchProjectsError: null,
+  fetchVideosError: null,
 }
+
+const toPageMeta = (meta: any): PageMeta | null =>
+  meta && typeof meta === 'object'
+    ? {
+        current_page: Number(meta.current_page) || 1,
+        last_page: Number(meta.last_page) || 1,
+        per_page: Number(meta.per_page) || 0,
+        total: Number(meta.total) || 0,
+      }
+    : null
 
 export const createProject = createAsyncThunk(
   'project/create',
@@ -167,15 +203,45 @@ export const updateProject = createAsyncThunk(
 
 export const fetchProjects = createAsyncThunk(
   'project/fetchProjects',
-  async (_, { rejectWithValue }) => {
+  async (arg: PageQuery = {}, { rejectWithValue }) => {
     try {
-      const response = await api.get('/api/projects')
+      const { page = 1, perPage = 15, search } = arg
+      const response = await api.get('/api/projects', {
+        params: { page, per_page: perPage, ...(search ? { search } : {}) },
+      })
       const payload = response.data?.data
       const projects = Array.isArray(payload?.data) ? payload.data : []
-      return projects as Project[]
+      return {
+        projects: projects as Project[],
+        meta: toPageMeta(payload?.meta),
+        append: !!arg.append,
+      }
     } catch (error: any) {
       return rejectWithValue(
         error.response?.data?.message || error.message || 'Failed to fetch projects'
+      )
+    }
+  }
+)
+
+export const fetchVideos = createAsyncThunk(
+  'project/fetchVideos',
+  async (arg: PageQuery = {}, { rejectWithValue }) => {
+    try {
+      const { page = 1, perPage = 12, search } = arg
+      const response = await api.get('/api/projects/videos', {
+        params: { page, per_page: perPage, ...(search ? { search } : {}) },
+      })
+      const payload = response.data?.data
+      const videos = Array.isArray(payload?.data) ? payload.data : []
+      return {
+        videos: videos as Project[],
+        meta: toPageMeta(payload?.meta),
+        append: !!arg.append,
+      }
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.message || error.message || 'Failed to fetch videos'
       )
     }
   }
@@ -346,12 +412,31 @@ const projectSlice = createSlice({
       })
       .addCase(fetchProjects.fulfilled, (state, action) => {
         state.isFetchingProjects = false
-        state.projects = action.payload
+        const { projects, meta, append } = action.payload
+        state.projects = append ? [...state.projects, ...projects] : projects
+        state.projectsMeta = meta
         state.fetchProjectsError = null
       })
       .addCase(fetchProjects.rejected, (state, action) => {
         state.isFetchingProjects = false
         state.fetchProjectsError = action.payload as string
+      })
+
+    builder
+      .addCase(fetchVideos.pending, (state) => {
+        state.isFetchingVideos = true
+        state.fetchVideosError = null
+      })
+      .addCase(fetchVideos.fulfilled, (state, action) => {
+        state.isFetchingVideos = false
+        const { videos, meta, append } = action.payload
+        state.videos = append ? [...state.videos, ...videos] : videos
+        state.videosMeta = meta
+        state.fetchVideosError = null
+      })
+      .addCase(fetchVideos.rejected, (state, action) => {
+        state.isFetchingVideos = false
+        state.fetchVideosError = action.payload as string
       })
 
     builder
@@ -372,6 +457,7 @@ const projectSlice = createSlice({
     builder
       .addCase(deleteProject.fulfilled, (state, action) => {
         state.projects = state.projects.filter((p) => String(p.id) !== String(action.payload))
+        state.videos = state.videos.filter((p) => String(p.id) !== String(action.payload))
         if (state.currentProject && String(state.currentProject.id) === String(action.payload)) {
           state.currentProject = null
         }

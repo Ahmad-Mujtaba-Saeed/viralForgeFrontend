@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProject } from '@/hooks/useProject'
-import { useProjectsLiveProgress } from '@/hooks/useProjectsLiveProgress'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
@@ -145,41 +144,45 @@ function VideosPageContent() {
   const searchParams = useSearchParams()
   // The header search navigates here with ?q=… — seed the local box from it.
   const queryParam = searchParams.get('q') ?? ''
-  const { projects, isFetchingProjects, fetchProjectsError, fetchProjects, deleteProject } = useProject()
+  const { videos: videoProjects, videosMeta, isFetchingVideos, fetchVideosError, fetchVideos, deleteProject } =
+    useProject()
   const [isGridView, setIsGridView] = useState(true)
   const [searchQuery, setSearchQuery] = useState(queryParam)
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
-
-  useEffect(() => {
-    fetchProjects().catch(() => {})
-  }, [fetchProjects])
-
-  const processingIds = useMemo(
-    () => projects.filter((p) => p.status === 'processing').map((p) => p.id),
-    [projects]
-  )
-  useProjectsLiveProgress(processingIds)
 
   // Keep the box in sync whenever the header sends a new query.
   useEffect(() => {
     setSearchQuery(queryParam)
   }, [queryParam])
 
-  const videos = useMemo(
-    () => projects.filter((p) => p.output_path || p.status === 'completed').flatMap(buildVideoItemsFromProject),
-    [projects]
+  // Debounced server search — the videos come from a dedicated paginated
+  // endpoint now, so the query and the page both live on the server. Any
+  // change to the box resets to page 1.
+  useEffect(() => {
+    const q = searchQuery.trim()
+    const t = setTimeout(() => {
+      fetchVideos({ page: 1, search: q || undefined }).catch(() => {})
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchQuery, fetchVideos])
+
+  // One completed project can render several clips (YT + Gameplay Short) —
+  // expand each into one card per output.
+  const filteredVideos = useMemo(
+    () => videoProjects.flatMap(buildVideoItemsFromProject),
+    [videoProjects]
   )
 
-  const filteredVideos = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return videos
-    return videos.filter(
-      (v) =>
-        v.title.toLowerCase().includes(q) ||
-        (v.templateType ?? '').toLowerCase().includes(q)
-    )
-  }, [videos, searchQuery])
+  const hasMore = !!videosMeta && videosMeta.current_page < videosMeta.last_page
+  const loadMore = () => {
+    if (!videosMeta || isFetchingVideos) return
+    fetchVideos({
+      page: videosMeta.current_page + 1,
+      search: searchQuery.trim() || undefined,
+      append: true,
+    }).catch(() => {})
+  }
 
   const openVideo = (video: VideoItem) => {
     if (video.outputPath) window.open(video.outputPath, '_blank')
@@ -242,11 +245,11 @@ function VideosPageContent() {
       </div>
 
       {/* States */}
-      {isFetchingProjects && filteredVideos.length === 0 ? (
+      {isFetchingVideos && filteredVideos.length === 0 ? (
         <VideoSkeletonGrid />
-      ) : fetchProjectsError ? (
+      ) : fetchVideosError ? (
         <div className="rounded-2xl border border-accent-line bg-accent-soft p-6 text-sm text-primary">
-          {fetchProjectsError}
+          {fetchVideosError}
         </div>
       ) : filteredVideos.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card py-16 text-center">
@@ -381,6 +384,19 @@ function VideosPageContent() {
               </div>
             </motion.div>
           ))}
+        </div>
+      )}
+
+      {hasMore && filteredVideos.length > 0 && (
+        <div className="flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={isFetchingVideos}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-5 text-sm font-semibold text-foreground shadow-soft disabled:opacity-60"
+          >
+            {isFetchingVideos ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {isFetchingVideos ? 'Loading…' : 'Load more'}
+          </button>
         </div>
       )}
 

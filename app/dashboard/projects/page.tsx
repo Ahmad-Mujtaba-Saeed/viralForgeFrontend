@@ -67,15 +67,21 @@ const ProjectsSkeletonGrid = () => (
 export default function ProjectsPage() {
   const router = useRouter()
   const dispatch = useAppDispatch()
-  const { projects, isFetchingProjects, fetchProjectsError, fetchProjects, deleteProject } = useProject()
+  const { projects, projectsMeta, isFetchingProjects, fetchProjectsError, fetchProjects, deleteProject } = useProject()
   const [retryingId, setRetryingId] = useState<number | null>(null)
   const [retryErrors, setRetryErrors] = useState<Record<number, string>>({})
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
   useEffect(() => {
-    fetchProjects().catch(() => {})
+    fetchProjects({ page: 1 }).catch(() => {})
   }, [fetchProjects])
+
+  const hasMore = !!projectsMeta && projectsMeta.current_page < projectsMeta.last_page
+  const loadMore = () => {
+    if (!projectsMeta || isFetchingProjects) return
+    fetchProjects({ page: projectsMeta.current_page + 1, append: true }).catch(() => {})
+  }
 
   const processingIds = useMemo(
     () => projects.filter((p) => p.status === 'processing').map((p) => p.id),
@@ -172,6 +178,7 @@ export default function ProjectsPage() {
           </button>
         </div>
       ) : (
+        <div className="space-y-8">
         <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {projects.map((project) => {
             const badge = statusBadge(project.status)
@@ -276,6 +283,19 @@ export default function ProjectsPage() {
               </motion.div>
             )
           })}
+        </div>
+        {hasMore && (
+          <div className="flex justify-center">
+            <button
+              onClick={loadMore}
+              disabled={isFetchingProjects}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-5 text-sm font-semibold text-foreground shadow-soft disabled:opacity-60"
+            >
+              {isFetchingProjects ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isFetchingProjects ? 'Loading…' : 'Load more'}
+            </button>
+          </div>
+        )}
         </div>
       )}
 

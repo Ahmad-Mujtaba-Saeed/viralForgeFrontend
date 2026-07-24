@@ -114,7 +114,15 @@ export function DashboardContent() {
   const renderingIds = useMemo(() => (rendering ? [rendering.id] : []), [rendering?.id])
   useProjectsLiveProgress(renderingIds)
 
-  const open = (id: number) => router.push(`/dashboard/create?projectId=${id}`)
+  // The AI Explainer has its own editor route; everything else opens in the
+  // generic create flow. Routing an explainer project to /dashboard/create
+  // dropped the user on the wrong (upload-based) template screen.
+  const open = (project: Pick<Project, 'id' | 'template_type'>) =>
+    router.push(
+      project.template_type === 'ai_explainer_video'
+        ? `/dashboard/explainer/${project.id}`
+        : `/dashboard/create?projectId=${project.id}`
+    )
 
   return (
     <div className="space-y-8">
@@ -205,7 +213,7 @@ export function DashboardContent() {
               </div>
             </div>
             <button
-              onClick={() => open(rendering.id)}
+              onClick={() => open(rendering)}
               className="h-9 flex-shrink-0 rounded-lg border border-border bg-card px-4 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
             >
               View
@@ -255,7 +263,7 @@ export function DashboardContent() {
               return (
                 <button
                   key={p.id}
-                  onClick={() => open(p.id)}
+                  onClick={() => open(p)}
                   className="group cursor-pointer text-left"
                 >
                   <div
