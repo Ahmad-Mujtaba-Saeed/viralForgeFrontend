@@ -15,6 +15,7 @@ import {
   History, Workflow, ArrowLeftRight, Trophy, Gauge, Quote,
   Smartphone, Images, MapPin, Newspaper,
   Calculator, Triangle, TrendingUp, Sparkles, Route, FileText, Eye, Lock,
+  Palette,
 } from 'lucide-react'
 
 interface Slot {
@@ -72,6 +73,7 @@ interface Storyboard {
   auto_visuals_auto?: boolean
   music_enabled?: boolean
   captions_enabled?: boolean
+  backdrop_enabled?: boolean
   font_pack?: string
   font_packs?: Record<string, { label: string; display: string; body: string; mono: string; use_when: string }>
   motion_style?: string
@@ -79,7 +81,8 @@ interface Storyboard {
   motion_styles?: Record<string, { label: string; use_when: string }>
   skin?: string
   skin_auto?: string | null
-  skins?: Record<string, { label: string; use_when: string }>
+  skin_resolved?: string
+  skins?: Record<string, { label: string; use_when: string; overrides_theme?: boolean }>
   composition_mode?: string
   composition_modes?: string[]
   board_style?: string
@@ -91,6 +94,7 @@ interface Storyboard {
   chapter_plan?: { chapters?: { id?: string; mode?: string; scene_ids?: string[] }[] } | null
   lint_report?: LintReportData | null
   chapter_chip?: boolean
+  accent_shift?: boolean
   aspect_variants?: boolean
   aspect_variants_multiplier?: number
   brand?: { logo_url?: string | null; color?: string | null; color_applied?: boolean }
@@ -349,6 +353,19 @@ export default function StoryboardPage() {
 
   const captionsOn = board?.captions_enabled ?? board?.aspect_ratio === '9:16'
 
+  const backdropOn = board?.backdrop_enabled ?? true
+
+  const handleToggleBackdrop = async () => {
+    await withPending('backdrop', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/backdrop`, { enabled: !backdropOn })
+        await fetchBoard()
+      } catch {
+        alert('Failed to toggle the backdrop field')
+      }
+    })
+  }
+
   const handleToggleCaptions = async () => {
     await withPending('captions', async () => {
       try {
@@ -389,6 +406,17 @@ export default function StoryboardPage() {
         await fetchBoard()
       } catch {
         alert('Failed to switch skin')
+      }
+    })
+  }
+
+  const handleToggleAccentShift = async () => {
+    await withPending('accent-shift', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/accent-shift`, { enabled: !(board?.accent_shift ?? false) })
+        await fetchBoard()
+      } catch {
+        alert('Failed to toggle accent shift')
       }
     })
   }
@@ -478,15 +506,26 @@ export default function StoryboardPage() {
     return <div className="p-10 text-center text-muted-foreground">Project not found.</div>
   }
 
-  // Chalk and notebook boards ship a FIXED palette that replaces the video's
-  // theme wholesale (board/boardTheme.ts), so the colour scheme controls would
-  // be lying if they stayed live. The registry marks which styles do this —
-  // the UI does not hardcode the list.
+  // Chalk and notebook boards — and the blueprint SKIN — ship a FIXED palette
+  // that replaces the video's theme wholesale (board/boardTheme.ts,
+  // theme.tsx), so the colour scheme controls would be lying if they stayed
+  // live. The registry marks which styles do this — the UI does not hardcode
+  // the list.
   const resolvedBoardStyle = board.board_style_resolved ?? 'slate'
-  const themeLocked =
+  const boardLocksTheme =
     board.composition_mode === 'math_board' &&
     Boolean(board.board_styles?.[resolvedBoardStyle]?.overrides_theme)
+  const resolvedSkin = board.skin_resolved ?? 'flat'
+  const skinLocksTheme = Boolean(board.skins?.[resolvedSkin]?.overrides_theme)
+  const themeLocked = boardLocksTheme || skinLocksTheme
   const lockedBoardLabel = board.board_styles?.[resolvedBoardStyle]?.label ?? resolvedBoardStyle
+  // What owns the palette right now, and how to hand it back to the scheme.
+  const themeLockOwner = boardLocksTheme
+    ? `the ${lockedBoardLabel} board`
+    : `the ${board.skins?.[resolvedSkin]?.label ?? resolvedSkin} skin`
+  const themeLockEscape = boardLocksTheme
+    ? 'Switch the board to Slate to use it.'
+    : 'Switch the skin to Flat to use it.'
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -528,6 +567,14 @@ export default function StoryboardPage() {
               <CaptionsOff className="h-4 w-4 text-ink3" />
             )}
             Captions {captionsOn ? 'On' : 'Off'}
+          </button>
+          <button onClick={handleToggleBackdrop} disabled={isPending('backdrop')} className={toggleBtn} title="A whisper-quiet grid/dot texture on the background, matched to each scene's mood">
+            {isPending('backdrop') ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : (
+              <Grid3x3 className={`h-4 w-4 ${backdropOn ? 'text-primary' : 'text-ink3'}`} />
+            )}
+            Backdrop {backdropOn ? 'On' : 'Off'}
           </button>
           <button
             onClick={handleToggleAutoVisuals}
@@ -651,9 +698,9 @@ export default function StoryboardPage() {
               <span className="text-muted-foreground">Color scheme: </span>
               <span className="font-semibold text-foreground">{board.theme.label}</span>
               {themeLocked && (
-                <span className="ml-2 inline-flex items-center gap-1 text-xs text-warn" title={`The ${lockedBoardLabel} board uses its own fixed palette, so the video's colour scheme has no effect. Switch the board to Slate to use it.`}>
+                <span className="ml-2 inline-flex items-center gap-1 text-xs text-warn" title={`${themeLockOwner[0].toUpperCase()}${themeLockOwner.slice(1)} uses its own fixed palette, so the video's colour scheme has no effect. ${themeLockEscape}`}>
                   <Lock className="h-3 w-3" />
-                  overridden by the {lockedBoardLabel} board
+                  overridden by {themeLockOwner}
                 </span>
               )}
             </div>
@@ -690,7 +737,7 @@ export default function StoryboardPage() {
             <button
               onClick={handleShuffleTheme}
               disabled={isPending('shuffle-theme') || themeLocked}
-              title={themeLocked ? `The ${lockedBoardLabel} board paints with its own fixed palette — switch it to Slate to use colour schemes.` : undefined}
+              title={themeLocked ? `${themeLockOwner[0].toUpperCase()}${themeLockOwner.slice(1)} paints with its own fixed palette — ${themeLockEscape.toLowerCase()}` : undefined}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-inset disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-card"
             >
               <Shuffle className={`h-4 w-4 ${isPending('shuffle-theme') ? 'animate-spin' : ''}`} /> Shuffle colors
@@ -788,6 +835,25 @@ export default function StoryboardPage() {
                 <BookMarked className={`h-4 w-4 ${board.chapter_chip ? 'text-primary' : 'text-ink3'}`} />
               )}
               Chapter chip {board.chapter_chip ? 'On' : 'Off'}
+            </button>
+          )}
+          {board.composition_mode === 'hybrid' && (
+            <button
+              onClick={handleToggleAccentShift}
+              disabled={isPending('accent-shift') || themeLocked}
+              className={toggleBtn}
+              title={
+                themeLocked
+                  ? `${themeLockOwner[0].toUpperCase()}${themeLockOwner.slice(1)} paints with its own fixed palette — accent shift has no effect on it.`
+                  : 'Each chapter after the first tilts the accent hue ±20° so act breaks read in colour too'
+              }
+            >
+              {isPending('accent-shift') ? (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <Palette className={`h-4 w-4 ${board.accent_shift && !themeLocked ? 'text-primary' : 'text-ink3'}`} />
+              )}
+              Accent shift {board.accent_shift ? 'On' : 'Off'}
             </button>
           )}
           <button
@@ -1390,14 +1456,19 @@ function SlotCard({
     )
   }
 
-  // Structured data-card contents (versus / chart / pros-cons / icon grid /
-  // timeline / steps / ranking / meter / map / headlines): read-only
-  // summaries — the renderer animates these natively, nothing to upload.
-  if ([
-    'versus', 'chart', 'proscons', 'icons',
-    'timeline_nodes', 'steps', 'ranking', 'meter', 'map', 'headlines',
-    'math_steps', 'geometry', 'function_plot', 'scenario',
-  ].includes(slot.content_type)) {
+  // Structured data-card contents: read-only summaries — the renderer draws
+  // these natively, so there is nothing to upload.
+  //
+  // The test is DELIBERATELY the complement of the two media types rather than
+  // a list of native ones. This used to whitelist the native content types,
+  // and every card the improvement loop added afterwards (formula, practice,
+  // mistake, term, venn, layers, decision, receipt, cycle, spectrum,
+  // pictogram, myth_fact — twelve of them) fell through to the media branch
+  // and asked the user to upload a photo for an equation. The backend already
+  // treats exactly `image`/`video` as the uploadable slots (serializeStoryboard
+  // in ExplainerController), so matching that rule here keeps the two sides in
+  // agreement and makes the next new card type correct for free.
+  if (slot.content_type !== 'image' && slot.content_type !== 'video') {
     const s = slot as Record<string, any>
     let summary: React.ReactNode = null
     if (slot.content_type === 'versus') {
@@ -1552,21 +1623,204 @@ function SlotCard({
           <p className="mt-1 text-[10px] uppercase tracking-wide text-ink3">Plotted natively — nothing to upload</p>
         </div>
       )
-    } else {
-      // icons / steps: chips of labels.
+    } else if (slot.content_type === 'formula') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <span className="font-mono font-semibold text-primary">{s.formula}</span>
+          <div className="mt-1 space-y-0.5">
+            {(s.parts || []).map((p: any, i: number) => (
+              <div key={i} className="flex gap-1.5 text-xs text-muted-foreground">
+                <span className="font-mono text-primary">{p?.match}</span>
+                <span>— {p?.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-1 text-[10px] uppercase tracking-wide text-ink3">Typeset and labelled natively — nothing to upload</p>
+        </div>
+      )
+    } else if (slot.content_type === 'practice') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <div className="font-mono text-primary">{s.prompt}</div>
+          {s.hint ? <p className="mt-1 text-xs text-muted-foreground">Hint: {s.hint}</p> : null}
+          {s.answer ? <p className="mt-0.5 font-mono text-xs text-muted-foreground">Answer: {s.answer}</p> : null}
+        </div>
+      )
+    } else if (slot.content_type === 'mistake') {
+      summary = (
+        <div className="space-y-0.5 text-sm text-foreground">
+          <div className="flex gap-1.5 text-muted-foreground"><span>✗</span><span className="font-mono">{s.wrong}</span></div>
+          <div className="flex gap-1.5"><span className="text-primary">✓</span><span className="font-mono">{s.correct}</span></div>
+          {s.why ? <p className="mt-1 text-xs text-muted-foreground">{s.why}</p> : null}
+        </div>
+      )
+    } else if (slot.content_type === 'term') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <span className="font-semibold text-primary">{s.term}</span>
+          {s.definition ? <p className="mt-0.5 text-xs text-muted-foreground">{s.definition}</p> : null}
+          {s.example ? <p className="mt-0.5 text-xs text-muted-foreground">e.g. {s.example}</p> : null}
+        </div>
+      )
+    } else if (slot.content_type === 'myth_fact') {
+      summary = (
+        <div className="space-y-0.5 text-sm text-foreground">
+          <div className="text-muted-foreground line-through">{s.myth}</div>
+          <div className="font-semibold text-primary">{s.fact}</div>
+        </div>
+      )
+    } else if (slot.content_type === 'spectrum') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{s.axis?.left_label}</span>
+            <span className="flex-1 border-t border-border" />
+            <span>{s.axis?.right_label}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
+            {(s.spectrum_items || []).map((it: any, i: number) => (
+              <span key={i} className={`rounded bg-card px-1.5 py-0.5 ${i === s.highlight_index ? 'font-semibold text-primary' : ''}`}>
+                {it?.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )
+    } else if (slot.content_type === 'pictogram') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <span className="font-semibold text-primary">{s.filled}{s.unit === '%' ? '%' : ` in ${s.of}`}</span>
+          <span className="ml-1.5 text-muted-foreground">{s.label}</span>
+        </div>
+      )
+    } else if (slot.content_type === 'venn') {
+      summary = (
+        <div className="text-sm text-foreground">
+          <span className="font-semibold text-primary">{s.left?.label}</span>
+          <span className="mx-1.5 text-ink3">∩</span>
+          <span className="font-semibold text-primary">{s.right?.label}</span>
+          {s.overlap?.label ? <p className="mt-1 text-xs text-muted-foreground">Overlap: {s.overlap.label}</p> : null}
+        </div>
+      )
+    } else if (slot.content_type === 'receipt') {
+      summary = (
+        <div className="space-y-0.5 text-sm text-foreground">
+          {(s.lines || []).map((l: any, i: number) => (
+            <div key={i} className="flex justify-between gap-2">
+              <span>{l?.label}</span>
+              <span className="font-mono text-primary">{l?.value}</span>
+            </div>
+          ))}
+          {s.total ? (
+            <div className="flex justify-between gap-2 border-t border-border pt-0.5 font-semibold">
+              <span>{s.total.label || 'Total'}</span>
+              <span className="font-mono text-primary">{s.total.value ?? s.total}</span>
+            </div>
+          ) : null}
+        </div>
+      )
+    } else if (slot.content_type === 'evidence') {
+      summary = (
+        <div className="space-y-1 text-sm text-foreground">
+          <p className="font-medium">{s.finding}</p>
+          <p className="text-xs text-muted-foreground">
+            — {s.source}
+            {s.year ? `, ${s.year}` : ''}
+            {s.sample ? ` · ${s.sample}` : ''}
+          </p>
+        </div>
+      )
+    } else if (slot.content_type === 'scale') {
+      summary = (
+        <div className="space-y-0.5 text-sm text-foreground">
+          {(s.scale_items || []).map((it: any, i: number) => (
+            <div key={i} className="flex justify-between gap-2">
+              <span className={i === s.highlight_index ? 'font-semibold text-primary' : ''}>{it?.label}</span>
+              <span className="font-mono text-primary">{it?.value}{s.unit ? ` ${s.unit}` : ''}</span>
+            </div>
+          ))}
+          {s.to_scale === false ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Too wide a spread to draw — the ratios are stated instead.
+            </p>
+          ) : null}
+        </div>
+      )
+    } else if (slot.content_type === 'proportion') {
+      summary = (
+        <div className="space-y-0.5 text-sm text-foreground">
+          {s.source_label ? <div className="text-xs text-muted-foreground">{s.source_label}</div> : null}
+          {(s.slices || []).map((sl: any, i: number) => (
+            <div key={i} className="flex justify-between gap-2">
+              <span className={i === s.highlight_index ? 'font-semibold text-primary' : ''}>{sl?.label}</span>
+              {/* The share is the validator's, not a number computed here — the
+                  review UI must show exactly what the card will draw. */}
+              <span className="font-mono text-primary">
+                {typeof sl?.share === 'number' ? `${Math.round(sl.share * 100)}%` : sl?.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )
+    } else if (slot.content_type === 'hierarchy') {
+      summary = (
+        <div className="space-y-1 text-sm text-foreground">
+          <div className="font-semibold text-primary">{s.root}</div>
+          <div className="space-y-0.5 pl-3">
+            {(s.children || []).map((c: any, i: number) => (
+              <div key={i}>
+                <span className={i === s.highlight_index ? 'font-semibold text-primary' : ''}>{c?.label}</span>
+                {Array.isArray(c?.children) && c.children.length ? (
+                  <span className="text-xs text-muted-foreground">
+                    {' — '}
+                    {c.children.map((g: any) => g?.label).filter(Boolean).join(', ')}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    } else if (Array.isArray(s.items) && s.items.length) {
+      // icons / steps / layers / decision / cycle / ranking-shaped contents:
+      // chips of labels.
       summary = (
         <div className="flex flex-wrap gap-1.5 text-xs text-foreground">
-          {(s.items || []).map((it: any, i: number) => (
+          {s.items.map((it: any, i: number) => (
             <span key={i} className="rounded bg-card px-1.5 py-0.5">
-              {typeof it === 'string' ? it : it.label || it.icon}
+              {typeof it === 'string' ? it : it.label || it.text || it.icon}
             </span>
           ))}
+        </div>
+      )
+    } else {
+      // Unknown/new content type: show whatever scalar fields it carries. A
+      // card the loop adds tomorrow reads as text here instead of silently
+      // becoming an upload box again.
+      summary = (
+        <div className="space-y-0.5 text-xs text-foreground">
+          {Object.entries(s)
+            .filter(([k, v]) =>
+              !['content_type', 'heading', 'caption', 'reveal', 'camera_move', 'dock', 'label'].includes(k) &&
+              (typeof v === 'string' || typeof v === 'number') && String(v) !== '')
+            .map(([k, v]) => (
+              <div key={k} className="flex gap-1.5">
+                <span className="text-ink3">{k.replace(/_/g, ' ')}:</span>
+                <span>{String(v)}</span>
+              </div>
+            ))}
         </div>
       )
     }
     return (
       <div className="rounded-xl border border-border bg-inset p-3">
-        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink3">{slotKey}</div>
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink3">
+          {slotKey}
+          <span className="ml-1.5 normal-case text-ink3/70">{slot.content_type.replace(/_/g, ' ')}</span>
+        </div>
+        {(slot as Record<string, any>).heading ? (
+          <div className="mb-1 font-semibold text-primary">{(slot as Record<string, any>).heading}</div>
+        ) : null}
         {summary}
       </div>
     )
