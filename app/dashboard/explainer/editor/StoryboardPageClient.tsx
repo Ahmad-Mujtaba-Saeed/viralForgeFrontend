@@ -77,6 +77,7 @@ interface Storyboard {
   music_track_id?: string | null
   music_categories?: string[]
   music_configured?: boolean
+  music_provider?: string
   captions_enabled?: boolean
   backdrop_enabled?: boolean
   font_pack?: string
@@ -781,9 +782,9 @@ export function StoryboardPageClient() {
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-ink3">Track</span>
-              {musicSource === 'local' ? (
-                <span className="text-xs text-muted-foreground">from your local library</span>
-              ) : null}
+              <span className="text-xs capitalize text-muted-foreground">
+                {musicSource === 'local' ? 'from your local library' : board.music_provider ?? null}
+              </span>
             </div>
 
             {musicCategory === 'auto' || musicCategory === 'none' ? (
@@ -800,8 +801,8 @@ export function StoryboardPageClient() {
               <p className="text-sm text-muted-foreground">
                 No auditionable tracks for this style
                 {board.music_configured === false
-                  ? ' — no Pixabay key is configured.'
-                  : " — the Pixabay audio API isn't returning results for this account (audio access is approved separately from images), and there is no local library for this style."}{' '}
+                  ? ` — no ${board.music_provider ?? 'music provider'} key is configured.`
+                  : ` — ${board.music_provider ?? 'the provider'} returned nothing for this style and there is no local library for it.`}{' '}
                 The style still applies and the renderer falls back to its automatic pick. To get a list here, drop mp3s into{' '}
                 <code className="rounded bg-inset px-1 py-0.5 text-xs">storage/app/public/audio/{musicCategory}/</code>.
               </p>

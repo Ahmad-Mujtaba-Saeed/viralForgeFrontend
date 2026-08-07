@@ -101,6 +101,7 @@ const PROVIDER_META: Record<string, { label: string; desc: string; keyNoun: stri
   apify: { label: 'Apify', desc: 'truefetch/youtube-video-downloader actor', keyNoun: 'API token' },
   pixabay: { label: 'Pixabay', desc: 'Royalty-free background music API (free key)', keyNoun: 'API key' },
   pexels: { label: 'Pexels', desc: 'Free stock footage API for explainer b-roll (free key)', keyNoun: 'API key' },
+  jamendo: { label: 'Jamendo', desc: 'Creative Commons music API — read-only needs only a client_id', keyNoun: 'client_id' },
 }
 
 function hasActiveKey(credentials: CredentialGroups | undefined, provider: string): boolean {
@@ -933,14 +934,35 @@ function AdminLlmModel() {
 }
 
 type MusicState = {
+  provider: string
+  providers: string[]
+  labels: Record<string, string>
+  configured: Record<string, boolean>
+  effective_provider: string | null
+  credentials: Record<string, ApiKey[]>
   pixabay_configured: boolean
-  credentials: ApiKey[]
+}
+
+const MUSIC_META: Record<string, { label: string; desc: string; keyNoun: string; docs: string }> = {
+  pixabay: {
+    label: 'Pixabay',
+    desc: 'Royalty-free, no attribution required. Note: audio API access is approved separately from images — an image-only key returns 403 here.',
+    keyNoun: 'API key',
+    docs: 'pixabay.com/api/docs',
+  },
+  jamendo: {
+    label: 'Jamendo',
+    desc: 'Creative Commons catalogue. Read-only calls need only a client_id, and tracks can be filtered to instrumental — so a bed never fights the voiceover.',
+    keyNoun: 'client_id',
+    docs: 'devportal.jamendo.com',
+  },
 }
 
 function AdminMusic() {
   const [state, setState] = useState<MusicState | null>(null)
   const [loading, setLoading] = useState(true)
   const [keysBusy, setKeysBusy] = useState(false)
+  const [saving, setSaving] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
@@ -951,11 +973,44 @@ function AdminMusic() {
       .finally(() => setLoading(false))
   }, [])
 
+  // The key manager returns EVERY provider group, so recompute each provider's
+  // configured flag rather than tracking one of them.
   const applyCredentials = (credentials: CredentialGroups, successText: string) => {
-    const pixabay = credentials?.pixabay ?? []
-    setState({ pixabay_configured: pixabay.some((k) => k.is_active), credentials: pixabay })
+    setState((prev) => {
+      if (!prev) return prev
+      const next: Record<string, ApiKey[]> = {}
+      const configured: Record<string, boolean> = {}
+      for (const p of prev.providers) {
+        next[p] = (credentials as Record<string, ApiKey[]>)?.[p] ?? prev.credentials[p] ?? []
+        configured[p] = next[p].some((k) => k.is_active)
+      }
+      return {
+        ...prev,
+        credentials: next,
+        configured,
+        effective_provider: configured[prev.provider] ? prev.provider : null,
+        pixabay_configured: configured.pixabay ?? false,
+      }
+    })
     setMsg({ kind: 'success', text: successText })
   }
+
+  const selectProvider = async (provider: string) => {
+    if (saving || state?.provider === provider) return
+    setMsg(null)
+    setSaving(provider)
+    try {
+      const res = await api.put('/api/admin/settings', { music_provider: provider })
+      setState(res.data.music)
+      setMsg({ kind: 'success', text: `Music source switched to ${MUSIC_META[provider]?.label ?? provider}.` })
+    } catch {
+      setMsg({ kind: 'error', text: 'Failed to update the music source.' })
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const activeMeta = state ? MUSIC_META[state.provider] ?? { label: state.provider, keyNoun: 'key', docs: '', desc: '' } : null
 
   return (
     <motion.section
@@ -969,10 +1024,11 @@ function AdminMusic() {
           <Music className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-[16px] font-semibold text-foreground">Background music (Pixabay)</h2>
+          <h2 className="text-[16px] font-semibold text-foreground">Background music</h2>
           <p className="text-xs text-muted-foreground">
-            Admin only — templates pull royalty-free music from the Pixabay API by category (horror,
-            cinematic, relaxing…). Free key from pixabay.com/api/docs.
+            Admin only — which royalty-free catalogue every template pulls music from, by category
+            (horror, cinematic, relaxing…). Categories mean the same thing on both sources, so
+            switching never changes what a saved project asked for.
           </p>
         </div>
       </div>
@@ -987,31 +1043,78 @@ function AdminMusic() {
         <p className="py-4 text-sm text-ink3">Settings unavailable.</p>
       ) : (
         <div>
-          <span
-            className={cn(
-              'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
-              state.pixabay_configured ? 'bg-good/10 text-good' : 'bg-warn-soft text-warn'
-            )}
-          >
-            {state.pixabay_configured
-              ? `${state.credentials.filter((k) => k.is_active).length} active key(s)`
-              : 'No keys — templates fall back to the local music library'}
-          </span>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {state?.providers?.map((opt) => {
+              const meta = MUSIC_META[opt] ?? { label: opt, desc: '', keyNoun: 'key', docs: '' }
+              const active = state.provider === opt
+              const configured = state.configured[opt] ?? false
+              const keyCount = (state.credentials[opt] ?? []).filter((k) => k.is_active).length
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => selectProvider(opt)}
+                  disabled={!!saving}
+                  className={cn(
+                    'relative flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition-colors',
+                    active ? 'border-primary bg-accent-soft' : 'border-border bg-card hover:border-primary/50',
+                    saving && 'cursor-not-allowed opacity-70'
+                  )}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span className="text-sm font-semibold text-foreground">{meta.label}</span>
+                    {saving === opt ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    ) : active ? (
+                      <Check className="h-4 w-4 text-primary" />
+                    ) : null}
+                  </div>
+                  <span className="text-xs text-ink3">{meta.desc}</span>
+                  <span
+                    className={cn(
+                      'mt-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+                      configured ? 'bg-good/10 text-good' : 'bg-warn-soft text-warn'
+                    )}
+                  >
+                    {configured ? `${keyCount} active ${meta.keyNoun}(s)` : `No ${meta.keyNoun} configured`}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
 
-          <ProviderKeyManager
-            provider="pixabay"
-            keys={state.credentials}
-            busy={keysBusy}
-            setBusy={setKeysBusy}
-            onCredentials={applyCredentials}
-            onError={(text) => setMsg({ kind: 'error', text })}
-          />
+          {!state.effective_provider && (
+            <p className="mt-3 text-xs text-warn">
+              {activeMeta?.label} is selected but has no {activeMeta?.keyNoun} — templates fall back to the
+              local music library in <code className="font-mono">storage/app/public/audio/</code>, or render
+              silent if it is empty.
+            </p>
+          )}
+
+          {/* Keys for the SELECTED provider only — one thing to manage at a
+              time, and the label names what that provider actually wants. */}
+          <div className="mt-4">
+            <div className="mb-1 text-xs font-semibold text-foreground">
+              {activeMeta?.label} {activeMeta?.keyNoun}s
+              {activeMeta?.docs ? (
+                <span className="ml-1.5 font-normal text-ink3">— free from {activeMeta.docs}</span>
+              ) : null}
+            </div>
+            <ProviderKeyManager
+              provider={state.provider}
+              keys={state.credentials[state.provider] ?? []}
+              busy={keysBusy}
+              setBusy={setKeysBusy}
+              onCredentials={applyCredentials}
+              onError={(text) => setMsg({ kind: 'error', text })}
+            />
+          </div>
 
           <p className="mt-3 text-xs text-ink3">
             Horror shorts default to the <em>horror</em> category and the explainer matches its
             storyboard mood automatically; every other template has music off by default — users opt in
             per video from the create page. Downloaded tracks are cached in storage, so a track is only
-            fetched once.
+            fetched once. Switching source does not re-pick music for videos already rendered.
           </p>
         </div>
       )}
