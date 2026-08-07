@@ -1,0 +1,16 @@
+# The API is served over HTTPS at https://ahmad-mujtaba.site, so the browser
+# talks to it directly and Netlify does not need to proxy anything. Keep
+# NEXT_PUBLIC_BACKEND_URL on an https:// origin — an http:// value is blocked
+# as mixed content, because this site is served over HTTPS.
+
+[build]
+  command = "pnpm build"
+  publish = "out"
+
+# Static export has no server, so deep links must fall through to the SPA shell.
+# `force` is deliberately unset: real files in out/ win, this only catches paths
+# that do not exist on disk.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

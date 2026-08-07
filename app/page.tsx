@@ -1,9 +1,8 @@
 import LandingLiquidGlass from "@/components/landing/variants/liquidglass"
 import { TEMPLATES, buildTemplatesFromApi, type Template, type PublicApiTemplate } from "@/components/landing/shared/content"
 
-// Re-read live template data on every request so admin changes (credit cost,
-// enabled/disabled, trending) show on the marketing page without a rebuild.
-export const dynamic = "force-dynamic"
+// Re-read live template data on build so static export succeeds.
+export const dynamic = "force-static"
 
 // Liquid Glass is the single shipped landing design — the editorial, cinematic,
 // minimal and aurora variants remain in the codebase but are no longer served.

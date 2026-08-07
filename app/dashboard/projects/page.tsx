@@ -106,7 +106,7 @@ export default function ProjectsPage() {
 
   const openProject = (project: { id: number; template_type?: string }) => {
     if (project.template_type === 'ai_explainer_video') {
-      router.push(`/dashboard/explainer/${project.id}`)
+      router.push(`/dashboard/explainer/editor?id=${project.id}`)
     } else {
       router.push(`/dashboard/create?projectId=${project.id}`)
     }

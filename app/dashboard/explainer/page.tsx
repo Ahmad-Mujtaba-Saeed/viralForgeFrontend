@@ -153,7 +153,7 @@ export default function ExplainerCreatePage() {
         music_volume: musicVolume,
       })
       const id = res.data?.data?.id
-      router.push(`/dashboard/explainer/${id}`)
+      router.push(`/dashboard/explainer/editor?id=${id}`)
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to create project')
       setSubmitting(false)

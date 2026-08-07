@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import api from '@/lib/axios'
 import { useBilling } from '@/hooks/useBilling'
 import { useProjectProgress } from '@/hooks/usePusher'
@@ -154,8 +154,9 @@ const TEMPLATE_ICON: Record<string, React.ReactNode> = {
 const toggleBtn =
   'inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-soft transition-colors hover:bg-inset disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-card'
 
-export default function StoryboardPage() {
-  const { id } = useParams<{ id: string }>()
+export function StoryboardPageClient() {
+  const searchParams = useSearchParams()
+  const id = searchParams.get('id')
   const router = useRouter()
   const { credits, hasSubscription, costFor, fetchBilling } = useBilling()
   const [board, setBoard] = useState<Storyboard | null>(null)

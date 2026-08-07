@@ -1,25 +1,29 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+// NOTE: This route is disabled for static export (output: 'export' in next.config.mjs).
+// It requires a live Node.js server. Re-enable when running as a server-side app.
+export const dynamic = 'force-static';
 
-export async function PUT(req: Request) {
-  const allowedOrigin = process.env.EDITOR_ALLOWED_ORIGIN || '*';
-  try {
-    const url = new URL(req.url);
-    const filename = url.searchParams.get('filename') || `upload_${Date.now()}.mp4`;
+// import { NextResponse } from 'next/server';
+// import fs from 'fs';
+// import path from 'path';
 
-    const uploadsDir = path.resolve(process.cwd(), 'public', 'uploads');
-    await fs.promises.mkdir(uploadsDir, { recursive: true });
+// export async function PUT(req: Request) {
+//   const allowedOrigin = process.env.EDITOR_ALLOWED_ORIGIN || '*';
+//   try {
+//     const url = new URL(req.url);
+//     const filename = url.searchParams.get('filename') || `upload_${Date.now()}.mp4`;
 
-    const arrayBuffer = await req.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const filePath = path.join(uploadsDir, filename);
-    await fs.promises.writeFile(filePath, buffer);
+//     const uploadsDir = path.resolve(process.cwd(), 'public', 'uploads');
+//     await fs.promises.mkdir(uploadsDir, { recursive: true });
 
-    const publicUrl = `${(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '')}/uploads/${encodeURIComponent(filename)}`;
+//     const arrayBuffer = await req.arrayBuffer();
+//     const buffer = Buffer.from(arrayBuffer);
+//     const filePath = path.join(uploadsDir, filename);
+//     await fs.promises.writeFile(filePath, buffer);
 
-    return NextResponse.json({ success: true, url: publicUrl }, { headers: { 'Access-Control-Allow-Origin': allowedOrigin } });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: String(err) }, { status: 500, headers: { 'Access-Control-Allow-Origin': allowedOrigin } });
-  }
-}
+//     const publicUrl = `${(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '')}/uploads/${encodeURIComponent(filename)}`;
+
+//     return NextResponse.json({ success: true, url: publicUrl }, { headers: { 'Access-Control-Allow-Origin': allowedOrigin } });
+//   } catch (err: any) {
+//     return NextResponse.json({ success: false, error: String(err) }, { status: 500, headers: { 'Access-Control-Allow-Origin': allowedOrigin } });
+//   }
+// }
