@@ -15,7 +15,7 @@ import {
   History, Workflow, ArrowLeftRight, Trophy, Gauge, Quote,
   Smartphone, Images, MapPin, Newspaper,
   Calculator, Triangle, TrendingUp, Sparkles, Route, FileText, Eye, Lock,
-  Palette,
+  Palette, Pause, SlidersHorizontal, Check,
 } from 'lucide-react'
 
 interface Slot {
@@ -72,6 +72,11 @@ interface Storyboard {
   auto_visuals?: boolean
   auto_visuals_auto?: boolean
   music_enabled?: boolean
+  music_category?: string
+  music_volume?: number
+  music_track_id?: string | null
+  music_categories?: string[]
+  music_configured?: boolean
   captions_enabled?: boolean
   backdrop_enabled?: boolean
   font_pack?: string
@@ -102,6 +107,13 @@ interface Storyboard {
   youtube_kit_url?: string | null
   thumbnail_url?: string | null
   output_videos?: { aspect: string; label: string; url: string | null }[]
+}
+
+interface MusicTrack {
+  id: string
+  title: string
+  duration: number
+  url: string
 }
 
 interface LintItem {
@@ -339,6 +351,105 @@ export function StoryboardPageClient() {
     })
   }
 
+  // ---- background music panel ------------------------------------------
+  // The renderer already understood category / volume / a chosen track; none
+  // of it was reachable after the create flow, so a storyboard was stuck with
+  // whatever mood the analyzer inferred.
+  const [musicOpen, setMusicOpen] = useState(false)
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([])
+  const [musicSource, setMusicSource] = useState<string>('none')
+  const [musicTracksLoading, setMusicTracksLoading] = useState(false)
+  const [previewingTrack, setPreviewingTrack] = useState<string | null>(null)
+  // Local slider value so dragging stays smooth while the PATCH is in flight.
+  const [volumeDraft, setVolumeDraft] = useState<number | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const volumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const musicCategory = board?.music_category ?? 'auto'
+  const musicVolume = volumeDraft ?? board?.music_volume ?? 0.09
+
+  // One <audio> for the whole panel: auditioning a second track must stop the
+  // first, and leaving the page must not keep playing.
+  const stopPreview = useCallback(() => {
+    audioRef.current?.pause()
+    audioRef.current = null
+    setPreviewingTrack(null)
+  }, [])
+
+  useEffect(() => () => stopPreview(), [stopPreview])
+
+  const previewTrack = (track: MusicTrack) => {
+    if (previewingTrack === track.id) {
+      stopPreview()
+      return
+    }
+    stopPreview()
+    const audio = new Audio(track.url)
+    // Audition at the level it will actually sit at under the narration,
+    // otherwise every track sounds far too loud to judge.
+    audio.volume = Math.min(1, Math.max(0.05, musicVolume * 3))
+    audio.onended = () => setPreviewingTrack(null)
+    audio.play().catch(() => setPreviewingTrack(null))
+    audioRef.current = audio
+    setPreviewingTrack(track.id)
+  }
+
+  const loadMusicTracks = useCallback(async (category: string) => {
+    if (category === 'auto' || category === 'none') {
+      setMusicTracks([])
+      setMusicSource('none')
+      return
+    }
+    setMusicTracksLoading(true)
+    try {
+      const res = await api.get(`/api/music/tracks`, { params: { category } })
+      setMusicTracks(res.data?.tracks ?? [])
+      setMusicSource(res.data?.source ?? 'none')
+    } catch {
+      setMusicTracks([])
+      setMusicSource('none')
+    } finally {
+      setMusicTracksLoading(false)
+    }
+  }, [])
+
+  // Only fetch once the panel is actually open — the track search is a rate
+  // limited upstream call, not something to spend on every storyboard view.
+  useEffect(() => {
+    if (musicOpen) void loadMusicTracks(musicCategory)
+  }, [musicOpen, musicCategory, loadMusicTracks])
+
+  const saveMusic = async (patch: Record<string, unknown>, key: string) => {
+    await withPending(key, async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/music`, patch)
+        await fetchBoard()
+      } catch {
+        alert('Failed to update background music')
+      }
+    })
+  }
+
+  const handleMusicCategory = async (category: string) => {
+    stopPreview()
+    await saveMusic({ category }, `music-cat:${category}`)
+  }
+
+  // Debounced: an input[range] fires on every pixel of the drag.
+  const handleMusicVolume = (value: number) => {
+    setVolumeDraft(value)
+    if (volumeTimer.current) clearTimeout(volumeTimer.current)
+    volumeTimer.current = setTimeout(() => {
+      void saveMusic({ volume: value }, 'music-volume').then(() => setVolumeDraft(null))
+    }, 400)
+  }
+
+  const handleMusicTrack = async (trackId: string) => {
+    // Clicking the selected track clears it, back to the automatic pick.
+    const next = board?.music_track_id === trackId ? '' : trackId
+    await saveMusic({ track_id: next }, `music-track:${trackId}`)
+  }
+
   const autoVisualsOn = Boolean(board?.auto_visuals)
 
   const handleToggleAutoVisuals = async () => {
@@ -559,6 +670,19 @@ export function StoryboardPageClient() {
             )}
             Music {(board.music_enabled ?? true) ? 'On' : 'Off'}
           </button>
+          {(board.music_enabled ?? true) ? (
+            <button
+              onClick={() => {
+                if (musicOpen) stopPreview()
+                setMusicOpen((o) => !o)
+              }}
+              className={toggleBtn}
+              title="Change the background track: category, specific song, and how loud it sits under the voiceover"
+            >
+              <SlidersHorizontal className={`h-4 w-4 ${musicOpen ? 'text-primary' : 'text-ink3'}`} />
+              Edit music
+            </button>
+          ) : null}
           <button onClick={handleToggleCaptions} disabled={isPending('captions')} className={toggleBtn} title="Karaoke word captions synced to the voiceover">
             {isPending('captions') ? (
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -595,6 +719,150 @@ export function StoryboardPageClient() {
           </button>
         </div>
       </header>
+
+      {musicOpen && (board.music_enabled ?? true) && (
+        <div className="mb-6 rounded-2xl border border-border bg-card p-4 shadow-soft">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-foreground">Background music</div>
+            <button onClick={() => { stopPreview(); setMusicOpen(false) }} className="text-ink3 hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Category. 'auto' keeps today's behaviour — the renderer maps the
+              storyboard's dominant mood onto a category. */}
+          <div className="mb-4">
+            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink3">Style</div>
+            <div className="flex flex-wrap gap-1.5">
+              {['auto', ...(board.music_categories ?? [])].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => handleMusicCategory(cat)}
+                  disabled={groupPending('music-cat')}
+                  title={cat === 'auto' ? "Match the music to the storyboard's dominant mood" : undefined}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold capitalize transition-colors disabled:opacity-60 ${
+                    musicCategory === cat
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-card text-muted-foreground hover:bg-inset'
+                  }`}
+                >
+                  {isPending(`music-cat:${cat}`) ? <Loader2 className="mx-2 h-4 w-4 animate-spin" /> : cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Volume. Capped at 40% because the bed is ducked under narration
+              on top of this — past that the voiceover stops winning. */}
+          <div className="mb-4">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-ink3">Volume</span>
+              <span className="text-xs font-semibold text-foreground">
+                {Math.round(musicVolume * 100)}%
+                {isPending('music-volume') ? <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin" /> : null}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={0.4}
+              step={0.01}
+              value={musicVolume}
+              onChange={(e) => handleMusicVolume(parseFloat(e.target.value))}
+              className="w-full accent-primary"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Sits under the voiceover, which ducks it further while anyone is speaking. 9% is the default.
+            </p>
+          </div>
+
+          {/* Track picker. Auditions the exact URLs the render pick draws
+              from, so what you hear is what you get. */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-ink3">Track</span>
+              {musicSource === 'local' ? (
+                <span className="text-xs text-muted-foreground">from your local library</span>
+              ) : null}
+            </div>
+
+            {musicCategory === 'auto' || musicCategory === 'none' ? (
+              <p className="text-sm text-muted-foreground">
+                {musicCategory === 'none'
+                  ? 'Music is off for this video — pick a style above to turn it back on.'
+                  : 'Pick a style above to choose a specific track. On Auto the renderer picks one to match the mood.'}
+              </p>
+            ) : musicTracksLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading tracks…
+              </div>
+            ) : musicTracks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No auditionable tracks for this style
+                {board.music_configured === false
+                  ? ' — no Pixabay key is configured.'
+                  : " — the Pixabay audio API isn't returning results for this account (audio access is approved separately from images), and there is no local library for this style."}{' '}
+                The style still applies and the renderer falls back to its automatic pick. To get a list here, drop mp3s into{' '}
+                <code className="rounded bg-inset px-1 py-0.5 text-xs">storage/app/public/audio/{musicCategory}/</code>.
+              </p>
+            ) : (
+              <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+                {musicTracks.map((track) => {
+                  const chosen = board.music_track_id === track.id
+                  return (
+                    <div
+                      key={track.id}
+                      className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${
+                        chosen ? 'border-primary bg-inset' : 'border-border bg-card'
+                      }`}
+                    >
+                      <button
+                        onClick={() => previewTrack(track)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border text-foreground hover:bg-inset"
+                        title={previewingTrack === track.id ? 'Stop' : 'Preview'}
+                      >
+                        {previewingTrack === track.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-foreground">{track.title}</div>
+                        {track.duration > 0 ? (
+                          <div className="text-xs text-muted-foreground">
+                            {Math.floor(track.duration / 60)}:{String(track.duration % 60).padStart(2, '0')}
+                          </div>
+                        ) : null}
+                      </div>
+                      <button
+                        onClick={() => handleMusicTrack(track.id)}
+                        disabled={groupPending('music-track')}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
+                          chosen
+                            ? 'bg-primary text-primary-foreground'
+                            : 'border border-border bg-card text-muted-foreground hover:bg-inset'
+                        }`}
+                      >
+                        {isPending(`music-track:${track.id}`) ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : chosen ? (
+                          <>
+                            <Check className="h-4 w-4" /> Using
+                          </>
+                        ) : (
+                          'Use'
+                        )}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {board.music_track_id ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                A specific track is locked in. Click “Using” to clear it and let the renderer pick.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {(board.composition_modes?.length ?? 0) > 0 && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
