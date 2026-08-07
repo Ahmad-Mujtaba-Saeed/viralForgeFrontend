@@ -170,7 +170,7 @@ function VideosPageContent() {
   // One completed project can render several clips (YT + Gameplay Short) —
   // expand each into one card per output.
   const filteredVideos = useMemo(
-    () => videoProjects.flatMap(buildVideoItemsFromProject),
+    () => videoProjects?.flatMap(buildVideoItemsFromProject),
     [videoProjects]
   )
 
