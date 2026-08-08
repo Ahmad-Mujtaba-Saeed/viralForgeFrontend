@@ -220,8 +220,8 @@ export function MusicPicker({
               </div>
               {source === 'local' && (
                 <p className="mt-1.5 text-xs text-ink3">
-                  Showing the built-in library — your Pixabay key doesn&apos;t have audio API access yet (it&apos;s
-                  approved separately from images).
+                  Showing tracks already downloaded to this server — the music service isn&apos;t reachable right now,
+                  so these are what a render can use.
                 </p>
               )}
             </>
