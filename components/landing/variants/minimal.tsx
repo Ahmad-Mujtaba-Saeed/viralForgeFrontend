@@ -3,8 +3,9 @@
 import * as React from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { ArrowRight, Check, Flame, Menu, X, Zap, ArrowUpRight, Wand2 } from "lucide-react"
+import { ArrowRight, Check, Menu, X, Zap, ArrowUpRight, Wand2 } from "lucide-react"
 import { useLandingAuth } from "@/components/landing/shared/useLandingAuth"
+import { BrandLogo } from "@/components/brand-logo"
 import {
   TEMPLATES,
   FEATURES,
@@ -56,7 +57,7 @@ function AppMock() {
         <span className="h-2.5 w-2.5 rounded-full bg-[#E4E4E7]" />
         <span className="h-2.5 w-2.5 rounded-full bg-[#E4E4E7]" />
         <span className="ml-3 rounded-md bg-[#F4F4F5] px-2.5 py-1 text-[11px] font-medium text-[#71717A]">
-          viralforge.app / create
+          vreato.app / create
         </span>
       </div>
       <div className="grid gap-6 p-6 sm:grid-cols-[1.2fr_1fr]">
@@ -125,11 +126,9 @@ function Navbar() {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-[#EDEDEF] bg-white/85 backdrop-blur-xl">
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E8492B]">
-            <Flame className="h-4 w-4 text-white" />
-          </span>
-          <span className="text-[18px] font-semibold tracking-tight text-[#18181B]">ViralForge</span>
+        {/* tone pinned: this variant's palette is hardcoded light. */}
+        <Link href="/" className="flex items-center" aria-label="Vreato home">
+          <BrandLogo height={28} tone="light" />
         </Link>
 
         <div className="hidden items-center gap-8 md:flex">
@@ -540,13 +539,10 @@ function Footer() {
   return (
     <footer className="bg-white">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-10 sm:flex-row sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E8492B]">
-            <Flame className="h-3.5 w-3.5 text-white" />
-          </span>
-          <span className="text-[15px] font-semibold tracking-tight text-[#18181B]">ViralForge</span>
+        <Link href="/" className="flex items-center" aria-label="Vreato home">
+          <BrandLogo height={24} tone="light" />
         </Link>
-        <p className="text-[13px] text-[#A1A1AA]">© {new Date().getFullYear()} ViralForge. All rights reserved.</p>
+        <p className="text-[13px] text-[#A1A1AA]">© {new Date().getFullYear()} Vreato. All rights reserved.</p>
         <div className="flex gap-5 text-[13px] text-[#71717A]">
           <a href="#" className="hover:text-[#18181B]">Privacy</a>
           <a href="#" className="hover:text-[#18181B]">Terms</a>

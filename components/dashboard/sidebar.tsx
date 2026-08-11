@@ -5,7 +5,6 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import {
-  Flame,
   LayoutDashboard,
   Video,
   Wand2,
@@ -21,6 +20,7 @@ import {
   CreditCard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { BrandLogo, BrandMark } from "@/components/brand-logo"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import {
@@ -66,23 +66,21 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       >
         {/* Header */}
         <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary shadow-soft">
-              <Flame className="h-5 w-5 text-sidebar-primary-foreground" />
-            </div>
-            <AnimatePresence mode="wait">
-              {!collapsed && (
-                <motion.span
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: "auto" }}
-                  exit={{ opacity: 0, width: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="font-display text-xl font-semibold tracking-tight text-sidebar-foreground overflow-hidden whitespace-nowrap"
-                >
-                  ViralForge
-                </motion.span>
-              )}
-            </AnimatePresence>
+          {/* Collapsed shows the mark alone; expanded shows the full wordmark,
+              which already contains the name — so there is no text beside it. */}
+          <Link href="/" className="flex items-center" aria-label="Vreato home">
+            {collapsed ? (
+              <BrandMark size={34} />
+            ) : (
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden whitespace-nowrap"
+              >
+                <BrandLogo height={26} />
+              </motion.span>
+            )}
           </Link>
           <Button
             variant="ghost"

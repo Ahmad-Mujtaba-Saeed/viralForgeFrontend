@@ -445,7 +445,7 @@ function Appearance() {
         <div>
           <h2 className="text-[16px] font-semibold text-foreground">Appearance</h2>
           <p className="text-xs text-muted-foreground">
-            ViralForge wears the Liquid Glass theme. Pick light or dark to suit you.
+            Vreato wears the Liquid Glass theme. Pick light or dark to suit you.
           </p>
         </div>
       </div>

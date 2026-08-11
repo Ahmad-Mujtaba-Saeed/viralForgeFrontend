@@ -16,7 +16,6 @@ import {
   Menu,
   X,
   Zap,
-  Sparkles,
   Play,
   Twitter,
   Instagram,
@@ -40,6 +39,7 @@ import {
 } from "@/components/landing/shared/content"
 import { TemplateArt, artKindFor } from "@/components/dashboard/template-art"
 import { useLandingAuth } from "@/components/landing/shared/useLandingAuth"
+import { BrandLogo } from "@/components/brand-logo"
 
 /* ------------------------------------------------------------------ *
  * Liquid Glass — a bright, prismatic, light-first landing.
@@ -315,19 +315,10 @@ function Navbar({ scrollY }: { scrollY: MotionValue<number> }) {
         }}
       >
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2.5">
-            <span
-              className="flex h-9 w-9 items-center justify-center rounded-2xl"
-              style={{
-                background: CTA_GRAD,
-                boxShadow: `0 6px 22px -6px ${C.violet}, inset 0 1px 0 rgba(255,255,255,0.5)`,
-              }}
-            >
-              <Sparkles className="h-[18px] w-[18px] text-white" />
-            </span>
-            <span className="font-display text-[19px] font-bold tracking-tight" style={{ color: C.ink }}>
-              ViralForge
-            </span>
+          {/* tone pinned: this variant's palette is hardcoded light, so the
+              logo must not follow the app's dark class. */}
+          <Link href="/" className="flex items-center" aria-label="Vreato home">
+            <BrandLogo height={30} tone="light" />
           </Link>
 
           <div className="hidden items-center gap-1 md:flex">
@@ -574,7 +565,7 @@ function AppMock({ templates }: { templates: Template[] }) {
           className="ml-3 rounded-md px-2.5 py-1 text-[11px] font-medium"
           style={{ background: "rgba(15,16,48,0.05)", color: C.ink3 }}
         >
-          viralforge.app / create
+          vreato.app / create
         </span>
       </div>
 
@@ -1305,17 +1296,12 @@ function Footer() {
   return (
     <footer className="border-t px-4 py-12 sm:px-6 lg:px-8" style={{ borderColor: C.lineSoft }}>
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 sm:flex-row">
-        <Link href="/" className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ background: CTA_GRAD }}>
-            <Sparkles className="h-4 w-4 text-white" />
-          </span>
-          <span className="font-display text-[16px] font-bold tracking-tight" style={{ color: C.ink }}>
-            ViralForge
-          </span>
+        <Link href="/" className="flex items-center" aria-label="Vreato home">
+          <BrandLogo height={26} tone="light" />
         </Link>
 
         <p className="text-[13px]" style={{ color: C.ink3 }}>
-          © {new Date().getFullYear()} ViralForge. All rights reserved.
+          © {new Date().getFullYear()} Vreato. All rights reserved.
         </p>
 
         <div className="flex items-center gap-2">

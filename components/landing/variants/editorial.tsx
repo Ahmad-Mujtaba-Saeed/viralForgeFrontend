@@ -6,7 +6,6 @@ import { motion } from "framer-motion"
 import {
   ArrowRight,
   Check,
-  Flame,
   Menu,
   X,
   Star,
@@ -32,6 +31,7 @@ import {
 } from "@/components/landing/shared/content"
 import { TemplateArt, artKindFor, paletteFor } from "@/components/dashboard/template-art"
 import { useLandingAuth } from "@/components/landing/shared/useLandingAuth"
+import { BrandLogo } from "@/components/brand-logo"
 
 /* Warm editorial palette — locked with explicit colors so the marketing page
    always reads as designed regardless of the app's light/dark preference. */
@@ -194,11 +194,9 @@ function Navbar() {
       }`}
     >
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E8492B] shadow-[0_6px_16px_rgba(232,73,43,.35)]">
-            <Flame className="h-[18px] w-[18px] text-white" />
-          </span>
-          <span className="font-display text-[19px] font-bold tracking-tight text-[#1A1916]">ViralForge</span>
+        {/* tone pinned: this variant's palette is hardcoded light. */}
+        <Link href="/" className="flex items-center" aria-label="Vreato home">
+          <BrandLogo height={30} tone="light" />
         </Link>
 
         <div className="hidden items-center gap-8 md:flex">
@@ -292,7 +290,7 @@ function Hero() {
             Turn a link or an idea into a <span className="text-[#E8492B]">video worth posting.</span>
           </h1>
           <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-[#6B6862]">
-            ViralForge scripts, voices, captions and edits short-form videos for you — from a prompt, a
+            Vreato scripts, voices, captions and edits short-form videos for you — from a prompt, a
             script, or a YouTube link. Pick a template, spend a few credits, download your video.
           </p>
 
@@ -644,11 +642,8 @@ function Footer() {
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="flex flex-col items-start justify-between gap-8 sm:flex-row sm:items-center">
           <div>
-            <Link href="/" className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E8492B]">
-                <Flame className="h-[18px] w-[18px] text-white" />
-              </span>
-              <span className="font-display text-[19px] font-bold tracking-tight text-[#1A1916]">ViralForge</span>
+            <Link href="/" className="flex items-center" aria-label="Vreato home">
+              <BrandLogo height={30} tone="light" />
             </Link>
             <p className="mt-3 max-w-xs text-[13.5px] text-[#6B6862]">
               Faceless short-form video, scripted, voiced and edited by AI.
@@ -667,7 +662,7 @@ function Footer() {
           </div>
         </div>
         <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-[#E9E6E0] pt-6 text-[13px] text-[#A09C94] sm:flex-row">
-          <span>© {new Date().getFullYear()} ViralForge. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Vreato. All rights reserved.</span>
           <span className="flex gap-5">
             <a href="#" className="hover:text-[#1A1916]">Privacy</a>
             <a href="#" className="hover:text-[#1A1916]">Terms</a>

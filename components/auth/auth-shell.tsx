@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { Sparkles, Check, AlertCircle, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { BrandLogo } from "@/components/brand-logo"
 
 /* Liquid Glass auth surface. The app-wide prism field (rendered by
    SkinProvider) shows behind both columns; these just add frosted glass and
@@ -69,14 +70,8 @@ export function AuthShell({
       {/* Left — form on a frosted glass card */}
       <div className="flex flex-col justify-center px-6 py-12 sm:px-10">
         <div className="mx-auto w-full max-w-sm">
-          <Link href="/" className="mb-9 inline-flex items-center gap-2.5">
-            <span
-              className="flex h-9 w-9 items-center justify-center rounded-2xl"
-              style={{ background: IRIS, boxShadow: "0 6px 22px -6px #7C5CFF, inset 0 1px 0 rgba(255,255,255,0.5)" }}
-            >
-              <Sparkles className="h-[18px] w-[18px] text-white" />
-            </span>
-            <span className="font-display text-[19px] font-bold tracking-tight text-foreground">ViralForge</span>
+          <Link href="/" className="mb-9 inline-flex items-center" aria-label="Vreato home">
+            <BrandLogo height={30} />
           </Link>
 
           <div className="glass glass-edge rounded-3xl p-7 shadow-soft-lg sm:p-8">

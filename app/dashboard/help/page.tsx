@@ -18,7 +18,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 
-const SUPPORT_EMAIL = 'support@viralforge.app'
+const SUPPORT_EMAIL = 'support@vreato.app'
 
 const faqs = [
   {

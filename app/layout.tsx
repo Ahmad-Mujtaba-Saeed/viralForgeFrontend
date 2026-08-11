@@ -28,25 +28,18 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'ViralForge - AI-Powered Video Content Creation',
+  title: 'Vreato - AI-Powered Video Content Creation',
   description: 'Transform your ideas into viral video content with AI-powered automation. Create, edit, and publish engaging videos in minutes.',
   generator: 'v0.app',
+  // The V mark is a gradient on transparency, so one icon reads on both a
+  // light and a dark tab strip — no prefers-color-scheme pair needed.
   icons: {
     icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
+      { url: '/brand/mark-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/brand/mark-64.png', sizes: '64x64', type: 'image/png' },
+      { url: '/brand/mark-512.png', sizes: '512x512', type: 'image/png' },
     ],
-    apple: '/apple-icon.png',
+    apple: '/brand/mark-180.png',
   },
 }
 /**
