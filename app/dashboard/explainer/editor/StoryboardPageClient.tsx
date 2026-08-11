@@ -15,7 +15,7 @@ import {
   History, Workflow, ArrowLeftRight, Trophy, Gauge, Quote,
   Smartphone, Images, MapPin, Newspaper,
   Calculator, Triangle, TrendingUp, Sparkles, Route, FileText, Eye, Lock,
-  Palette, Pause, SlidersHorizontal, Check,
+  Palette, Pause, SlidersHorizontal, Check, Wand2, Send, Plus, CornerDownRight, Mic, Pencil,
 } from 'lucide-react'
 
 interface Slot {
@@ -99,6 +99,7 @@ interface Storyboard {
   rendered_look?: string | null
   chapter_plan?: { chapters?: { id?: string; mode?: string; scene_ids?: string[] }[] } | null
   lint_report?: LintReportData | null
+  revision?: RevisionData | null
   chapter_chip?: boolean
   accent_shift?: boolean
   aspect_variants?: boolean
@@ -127,6 +128,28 @@ interface LintReportData {
   items: LintItem[]
   counts: { error: number; warn: number; info: number }
   checked_at?: string
+}
+
+interface RevisionResult {
+  state: 'done' | 'error'
+  at?: string
+  request?: string
+  reply?: string
+  summary?: string
+  message?: string
+  changed?: string[]
+  added?: string[]
+  removed?: string[]
+  moved?: string[]
+  findings?: LintItem[]
+}
+interface RevisionData {
+  running: boolean
+  request?: string | null
+  last?: RevisionResult | null
+  log?: { at: string; request: string; summary: string; state: string }[]
+  count?: number
+  max_touched?: number
 }
 
 const COMPOSITION_LABELS: Record<string, string> = {
@@ -306,6 +329,52 @@ export function StoryboardPageClient() {
       setRendering(false)
     }
   }
+
+  // ---- AI revision: "here is what is wrong with this storyboard" ----------
+  // The note goes to a planner that names the scenes it is about, and only
+  // those cards are rebuilt. `targets` is the optional scoping the scene
+  // cards offer, so "make this shorter" has a subject.
+  const [reviseOpen, setReviseOpen] = useState(false)
+  const [reviseText, setReviseText] = useState('')
+  const [reviseTargets, setReviseTargets] = useState<string[]>([])
+  const [reviseError, setReviseError] = useState<string | null>(null)
+  const [reviseSending, setReviseSending] = useState(false)
+  const reviseRef = useRef<HTMLTextAreaElement | null>(null)
+  const revising = Boolean(board?.revision?.running)
+
+  const askAiAbout = useCallback((sceneId: string) => {
+    setReviseTargets((prev) => (prev.includes(sceneId) ? prev.filter((s) => s !== sceneId) : [...prev, sceneId]))
+    setReviseOpen(true)
+    setTimeout(() => reviseRef.current?.focus(), 50)
+  }, [])
+
+  const handleRevise = async () => {
+    const note = reviseText.trim()
+    if (note.length < 3 || revising) return
+    setReviseSending(true)
+    setReviseError(null)
+    try {
+      await api.post(`/api/explainer/projects/${id}/revise`, {
+        request: note,
+        scene_ids: reviseTargets,
+      })
+      setReviseText('')
+      setReviseTargets([])
+      await fetchBoard()
+    } catch (err: any) {
+      setReviseError(err?.response?.data?.message || 'Could not start the revision.')
+    } finally {
+      setReviseSending(false)
+    }
+  }
+
+  // Pusher drives the refresh while the job runs, but a revision is short and
+  // the storyboard must never look stuck if the socket is unavailable.
+  useEffect(() => {
+    if (!revising) return
+    const timer = setInterval(() => { fetchBoard() }, 4000)
+    return () => clearInterval(timer)
+  }, [revising, fetchBoard])
 
   const handleReanalyze = async () => {
     if (!confirm('Re-run analysis? This rebuilds the storyboard — uploads whose scene survives are kept, the rest are removed.')) return
@@ -615,7 +684,9 @@ export function StoryboardPageClient() {
     )
   }
 
-  if (!board) {
+  // `id` comes from the query string, so it is nullable until here; every
+  // panel below takes it as a plain string.
+  if (!board || !id) {
     return <div className="p-10 text-center text-muted-foreground">Project not found.</div>
   }
 
@@ -715,7 +786,25 @@ export function StoryboardPageClient() {
             )}
             AI visuals {autoVisualsOn ? 'On' : 'Off'}
           </button>
-          <button onClick={handleReanalyze} disabled={isPending('reanalyze')} className={toggleBtn}>
+          <button
+            onClick={() => { setReviseOpen(true); setTimeout(() => reviseRef.current?.focus(), 50) }}
+            disabled={revising || board.status === 'analyzing'}
+            className={toggleBtn}
+            title="Tell the AI what to change — only the cards your note is about are rebuilt"
+          >
+            {revising ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : (
+              <Wand2 className="h-4 w-4 text-primary" />
+            )}
+            {revising ? 'Applying changes…' : 'Edit with AI'}
+          </button>
+          <button
+            onClick={handleReanalyze}
+            disabled={isPending('reanalyze') || revising}
+            className={toggleBtn}
+            title="Rebuild the whole storyboard from the script — use “Edit with AI” to change only some cards"
+          >
             <RefreshCw className={`h-4 w-4 ${isPending('reanalyze') ? 'animate-spin' : ''}`} /> Re-analyze
           </button>
         </div>
@@ -1152,6 +1241,22 @@ export function StoryboardPageClient() {
           see before a list of scene cards. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_384px] xl:grid-cols-[minmax(0,1fr)_460px]">
         <div className="order-last min-w-0 lg:order-first">
+          {board.status !== 'analyzing' && (
+            <RevisePanel
+              board={board}
+              open={reviseOpen}
+              onOpen={setReviseOpen}
+              text={reviseText}
+              onText={setReviseText}
+              targets={reviseTargets}
+              onClearTarget={(sceneId) => setReviseTargets((prev) => prev.filter((s) => s !== sceneId))}
+              onSubmit={handleRevise}
+              sending={reviseSending}
+              error={reviseError}
+              textareaRef={reviseRef}
+            />
+          )}
+
           {board.status !== 'analyzing' && <LintReport report={board.lint_report} />}
 
           {board.status === 'analyzing' ? (
@@ -1169,6 +1274,9 @@ export function StoryboardPageClient() {
                   board={board}
                   cameraMoves={board.camera_moves || []}
                   onChange={fetchBoard}
+                  onAskAi={askAiAbout}
+                  targeted={reviseTargets.includes(scene.scene_id)}
+                  revising={revising}
                 />
               ))}
             </div>
@@ -1219,7 +1327,11 @@ export function StoryboardPageClient() {
       {board.scenes.length > 0 && board.status !== 'analyzing' && (
         <div className="sticky bottom-4 mt-8 flex items-center justify-between gap-4 rounded-2xl border border-border bg-card/95 p-4 shadow-soft-lg backdrop-blur">
           <div className="text-sm font-medium">
-            {!canAffordRender ? (
+            {revising ? (
+              <span className="inline-flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" /> Applying your changes to the storyboard…
+              </span>
+            ) : !canAffordRender ? (
               <span className="text-warn">
                 {hasSubscription
                   ? `Needs ${explainerCost} credits — you have ${credits}.`
@@ -1233,7 +1345,7 @@ export function StoryboardPageClient() {
           </div>
           <button
             onClick={handleRender}
-            disabled={!board.ready_to_render || rendering || board.status === 'processing' || !canAffordRender}
+            disabled={!board.ready_to_render || rendering || revising || board.status === 'processing' || !canAffordRender}
             className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground shadow-soft disabled:opacity-50"
           >
             {board.status === 'processing' ? (
@@ -1528,6 +1640,218 @@ function FinalRender({ board, stale = false }: { board: Storyboard; stale?: bool
 
 /** Quality-gate report (§12): collapsible severity-chip summary of the
  *  storyboard lint — informational only, it never blocks a render. */
+/**
+ * The storyboard's edit surface: say what is wrong, in words.
+ *
+ * The promise that makes it usable — and the one the copy has to keep
+ * repeating — is that only the cards the note is about get rebuilt. Every
+ * other scene keeps the picture you uploaded to it and the voiceover already
+ * recorded for it, so there is no reason to be shy about asking.
+ */
+function RevisePanel({
+  board, open, onOpen, text, onText, targets, onClearTarget, onSubmit, sending, error, textareaRef,
+}: {
+  board: Storyboard
+  open: boolean
+  onOpen: (open: boolean) => void
+  text: string
+  onText: (text: string) => void
+  targets: string[]
+  onClearTarget: (sceneId: string) => void
+  onSubmit: () => void
+  sending: boolean
+  error: string | null
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+}) {
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const revision = board.revision
+  const running = Boolean(revision?.running)
+  const last = revision?.last ?? null
+  const orderOf = (sceneId: string) => board.scenes.find((s) => s.scene_id === sceneId)?.order
+
+  const examples = [
+    'Scene 3 should be a bar chart of the revenue numbers, not bullet points.',
+    'The intro is too long — cut it to one sentence.',
+    'Add a scene after scene 5 explaining why the price fell.',
+    'Drop the timeline card, it repeats what scene 2 already said.',
+  ]
+
+  const badge = (n: number | undefined, label: string, tone: string) =>
+    n && n > 0 ? (
+      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${tone}`}>
+        {n} {label}
+      </span>
+    ) : null
+
+  return (
+    <div className="mb-6 rounded-2xl border border-border bg-card shadow-soft">
+      <button
+        onClick={() => onOpen(!open)}
+        className="flex w-full items-center justify-between gap-3 p-4 text-left"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          {running ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+          ) : (
+            <Wand2 className="h-4 w-4 shrink-0 text-primary" />
+          )}
+          <span className="text-sm font-semibold text-foreground">
+            {running ? 'Applying your changes…' : 'Not right? Tell the AI what to change'}
+          </span>
+          {!running && !open ? (
+            <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+              — only the cards you mention are rebuilt
+            </span>
+          ) : null}
+        </div>
+        <span className="shrink-0 text-xs text-ink3">{open ? 'Hide' : 'Open'}</span>
+      </button>
+
+      {running && (
+        <div className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
+          <span className="italic">“{revision?.request}”</span>
+          <p className="mt-1 text-xs">
+            Reading your note against the storyboard, rewriting only the cards it names, and fitting them back in.
+            Everything else — including your uploads — is untouched.
+          </p>
+        </div>
+      )}
+
+      {open && !running && (
+        <div className="border-t border-border p-4">
+          {targets.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">About:</span>
+              {targets.map((sceneId) => (
+                <button
+                  key={sceneId}
+                  onClick={() => onClearTarget(sceneId)}
+                  className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-primary hover:bg-inset"
+                  title="Stop targeting this scene"
+                >
+                  Scene {orderOf(sceneId) ?? '?'}
+                  <X className="h-3 w-3" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(e) => onText(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') onSubmit()
+            }}
+            rows={3}
+            placeholder="e.g. “Scene 4's chart is wrong — use the 2019-2021 revenue instead” or “add a scene after scene 2 about the price cut”"
+            className="w-full resize-y rounded-xl border border-border bg-inset px-3 py-2 text-sm text-foreground outline-none placeholder:text-ink3 focus:border-primary"
+          />
+
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {examples.map((example) => (
+                <button
+                  key={example}
+                  onClick={() => onText(example)}
+                  className="rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-inset"
+                >
+                  {example.length > 44 ? `${example.slice(0, 42)}…` : example}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={onSubmit}
+              disabled={sending || text.trim().length < 3}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-soft disabled:opacity-50"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Apply changes
+            </button>
+          </div>
+
+          <p className="mt-2 text-xs text-muted-foreground">
+            Name a scene and only that card is rebuilt — anything you uploaded elsewhere, and the voiceover already
+            made for it, stays exactly as it is. Up to {revision?.max_touched ?? 12} cards per request. Use{' '}
+            <span className="font-semibold">Re-analyze</span> instead when you want the whole video rewritten.
+          </p>
+
+          {error && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-accent-line bg-accent-soft px-3 py-2 text-sm text-primary">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!running && last && (
+        <div className="border-t border-border px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {last.state === 'error' ? (
+              <AlertTriangle className="h-4 w-4 text-warn" />
+            ) : (
+              <Check className="h-4 w-4 text-good" />
+            )}
+            <span className="text-sm font-semibold text-foreground">
+              {last.state === 'error' ? 'The last revision did not go through' : 'Last revision'}
+            </span>
+            {badge(last.changed?.length, 'rewritten', 'bg-accent-soft text-primary')}
+            {badge(last.added?.length, 'added', 'bg-good/10 text-good')}
+            {badge(last.removed?.length, 'removed', 'bg-warn/10 text-warn')}
+            {badge(last.moved?.length, 'moved', 'bg-inset text-muted-foreground')}
+          </div>
+
+          {last.request ? (
+            <p className="mt-1.5 text-sm italic text-muted-foreground">“{last.request}”</p>
+          ) : null}
+          {last.reply || last.message ? (
+            <p className="mt-1 flex items-start gap-1.5 text-sm text-foreground">
+              <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink3" />
+              <span>{last.reply || last.message}</span>
+            </p>
+          ) : null}
+          {last.state === 'done' && last.summary ? (
+            <p className="mt-1 text-xs text-muted-foreground">{last.summary}</p>
+          ) : null}
+
+          {(last.findings?.length ?? 0) > 0 && (
+            <ul className="mt-2 space-y-1 border-t border-border pt-2">
+              {last.findings!.map((finding, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warn" />
+                  <span>{finding.message}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {(revision?.log?.length ?? 0) > 1 && (
+            <>
+              <button
+                onClick={() => setHistoryOpen(!historyOpen)}
+                className="mt-2 text-xs font-semibold text-primary hover:underline"
+              >
+                {historyOpen ? 'Hide' : `Show all ${revision!.log!.length} requests`}
+              </button>
+              {historyOpen && (
+                <ul className="mt-2 space-y-1.5 border-t border-border pt-2">
+                  {revision!.log!.map((entry, i) => (
+                    <li key={i} className="text-xs">
+                      <span className="italic text-muted-foreground">“{entry.request}”</span>
+                      <span className="ml-1.5 text-ink3">— {entry.summary}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LintReport({ report }: { report?: LintReportData | null }) {
   const [open, setOpen] = useState(false)
   if (!report || !report.items?.length) return null
@@ -1571,16 +1895,25 @@ function LintReport({ report }: { report?: LintReportData | null }) {
 }
 
 function SceneCard({
-  projectId, scene, board, cameraMoves, onChange,
+  projectId, scene, board, cameraMoves, onChange, onAskAi, targeted = false, revising = false,
 }: {
   projectId: string
   scene: Scene
   board: Storyboard
   cameraMoves: string[]
   onChange: () => void
+  onAskAi?: (sceneId: string) => void
+  targeted?: boolean
+  revising?: boolean
 }) {
   const templateLabel = board.templates?.[scene.layout_template]?.label || scene.layout_template
   const slotKeys = Object.keys(scene.slots)
+
+  // What the last revision did to THIS card, so the change is visible on the
+  // board rather than only summarised at the top.
+  const last = board.revision?.running ? null : board.revision?.last
+  const wasAdded = last?.state === 'done' && (last.added ?? []).includes(scene.scene_id)
+  const wasChanged = last?.state === 'done' && (last.changed ?? []).includes(scene.scene_id)
 
   const updateTransition = async (t: string) => {
     try {
@@ -1592,9 +1925,11 @@ function SceneCard({
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
+    <div className={`rounded-2xl border bg-card p-4 shadow-soft transition-colors ${
+      targeted ? 'border-primary' : wasAdded || wasChanged ? 'border-accent-line' : 'border-border'
+    }`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-primary">
             {scene.order}
           </span>
@@ -1603,24 +1938,53 @@ function SceneCard({
             {templateLabel}
           </span>
           <span className="font-mono text-xs text-ink3">{scene.duration_seconds}s</span>
+          {wasAdded ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-good/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-good">
+              <Plus className="h-3 w-3" /> new
+            </span>
+          ) : wasChanged ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+              <Wand2 className="h-3 w-3" /> updated
+            </span>
+          ) : null}
         </div>
-        <label className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Film className="h-3 w-3" /> transition
-          <select
-            value={scene.transition}
-            onChange={(e) => updateTransition(e.target.value)}
-            className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-foreground outline-none focus:border-primary"
-          >
-            {(board.transitions || []).map((t) => (
-              <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
-            ))}
-          </select>
-        </label>
+        <div className="flex items-center gap-2">
+          {onAskAi && (
+            <button
+              onClick={() => onAskAi(scene.scene_id)}
+              disabled={revising}
+              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 ${
+                targeted
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-card text-muted-foreground hover:bg-inset'
+              }`}
+              title={targeted ? 'This scene is part of your next request' : 'Ask the AI to change this scene'}
+            >
+              <Wand2 className="h-3 w-3" /> {targeted ? 'Selected' : 'Edit with AI'}
+            </button>
+          )}
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Film className="h-3 w-3" /> transition
+            <select
+              value={scene.transition}
+              onChange={(e) => updateTransition(e.target.value)}
+              className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-foreground outline-none focus:border-primary"
+            >
+              {(board.transitions || []).map((t) => (
+                <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
-      {scene.narration && (
-        <p className="mb-3 text-sm italic text-muted-foreground">“{scene.narration}”</p>
-      )}
+      <NarrationEditor
+        projectId={projectId}
+        sceneId={scene.scene_id}
+        narration={scene.narration}
+        disabled={revising}
+        onChange={onChange}
+      />
 
       <div className={`grid gap-3 ${slotKeys.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
         {slotKeys.map((slotKey) => (
@@ -1632,6 +1996,7 @@ function SceneCard({
             slot={scene.slots[slotKey]}
             cameraMoves={cameraMoves}
             autoVisuals={Boolean(board.auto_visuals)}
+            disabled={revising}
             onChange={onChange}
           />
         ))}
@@ -1640,8 +2005,227 @@ function SceneCard({
   )
 }
 
+/**
+ * The scene's spoken line, editable in place.
+ *
+ * Safe to hand over because nothing has been spoken yet: the voiceover is
+ * synthesised at render time and cached under a hash of this exact text, so
+ * editing one scene re-records that scene and leaves every other wav — and
+ * the credits already spent on it — alone. The card's duration is only an
+ * estimate until then, which is why saving re-estimates it from the new words.
+ */
+function NarrationEditor({
+  projectId, sceneId, narration, disabled = false, onChange,
+}: {
+  projectId: string
+  sceneId: string
+  narration: string
+  disabled?: boolean
+  onChange: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(narration)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+
+  const open = () => {
+    if (disabled) return
+    setDraft(narration)
+    setError(null)
+    setEditing(true)
+    setTimeout(() => {
+      ref.current?.focus()
+      ref.current?.setSelectionRange(narration.length, narration.length)
+    }, 30)
+  }
+
+  const save = async () => {
+    if (draft === narration) {
+      setEditing(false)
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await api.patch(`/api/explainer/projects/${projectId}/scenes/${sceneId}`, { narration: draft })
+      await onChange()
+      setEditing(false)
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not save that line.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={open}
+        disabled={disabled}
+        className="group mb-3 flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-inset disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+        title="Edit what the voiceover says here"
+      >
+        <Mic className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink3" />
+        <span className={`flex-1 text-sm ${narration ? 'italic text-muted-foreground' : 'text-ink3'}`}>
+          {narration ? `“${narration}”` : 'No voiceover on this scene — click to write one.'}
+        </span>
+        <Pencil className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink3 opacity-0 transition-opacity group-hover:opacity-100" />
+      </button>
+    )
+  }
+
+  return (
+    <div className="mb-3 rounded-xl border border-primary bg-inset p-2.5">
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <Mic className="h-3.5 w-3.5 text-primary" /> Voiceover for this scene
+      </div>
+      <textarea
+        ref={ref}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        rows={3}
+        maxLength={1500}
+        placeholder="What the narrator says over this scene. Leave empty for a silent beat."
+        className="w-full resize-y rounded-lg border border-border bg-card px-2.5 py-2 text-sm text-foreground outline-none placeholder:text-ink3 focus:border-primary"
+      />
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11px] text-ink3">
+          {draft.trim().split(/\s+/).filter(Boolean).length} words · about{' '}
+          {Math.max(3, Math.round(draft.trim().split(/\s+/).filter(Boolean).length / 2.5))}s spoken · the voice is
+          recorded at render, so only this scene is re-recorded
+        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setEditing(false)}
+            className="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-card"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+          </button>
+        </div>
+      </div>
+      {error && <p className="mt-1.5 text-xs text-warn">{error}</p>}
+    </div>
+  )
+}
+
+/**
+ * The words ON the card (as opposed to the words spoken over it). The
+ * endpoint has accepted these since the storyboard shipped; nothing ever
+ * offered them.
+ */
+function TextBlockEditor({
+  projectId, sceneId, slotKey, slot, disabled = false, onChange, onDone,
+}: {
+  projectId: string
+  sceneId: string
+  slotKey: string
+  slot: Slot
+  disabled?: boolean
+  onChange: () => void
+  onDone: () => void
+}) {
+  const [heading, setHeading] = useState(slot.heading ?? '')
+  const [bullets, setBullets] = useState<string[]>(slot.bullets?.length ? [...slot.bullets] : [''])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const setBullet = (i: number, value: string) =>
+    setBullets((prev) => prev.map((b, index) => (index === i ? value : b)))
+
+  const save = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await api.patch(`/api/explainer/projects/${projectId}/scenes/${sceneId}/slots/${slotKey}`, {
+        heading,
+        bullets: bullets.map((b) => b.trim()).filter(Boolean),
+      })
+      await onChange()
+      onDone()
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Could not save this card.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-primary bg-inset p-3">
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink3">{slotKey}</div>
+      <input
+        value={heading}
+        onChange={(e) => setHeading(e.target.value)}
+        maxLength={80}
+        placeholder="Heading"
+        className="mb-1.5 w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm font-semibold text-foreground outline-none placeholder:text-ink3 focus:border-primary"
+      />
+      <div className="space-y-1">
+        {bullets.map((bullet, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <span className="text-primary">›</span>
+            <input
+              value={bullet}
+              onChange={(e) => setBullet(i, e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && bullets.length < 5) setBullets((prev) => [...prev, ''])
+              }}
+              maxLength={160}
+              placeholder="A line on the card"
+              className="w-full rounded-lg border border-border bg-card px-2 py-1 text-sm text-foreground outline-none placeholder:text-ink3 focus:border-primary"
+            />
+            <button
+              onClick={() => setBullets((prev) => prev.filter((_, index) => index !== i))}
+              className="shrink-0 text-ink3 hover:text-foreground"
+              title="Remove this line"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <button
+          onClick={() => setBullets((prev) => [...prev, ''])}
+          disabled={bullets.length >= 5}
+          className="inline-flex items-center gap-1 text-xs font-semibold text-primary disabled:opacity-40"
+        >
+          <Plus className="h-3 w-3" /> Add line {bullets.length >= 5 ? '(5 max)' : ''}
+        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onDone}
+            className="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-card"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={saving || disabled}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+          </button>
+        </div>
+      </div>
+      {error && <p className="mt-1.5 text-xs text-warn">{error}</p>}
+    </div>
+  )
+}
+
 function SlotCard({
-  projectId, sceneId, slotKey, slot, cameraMoves, autoVisuals = false, onChange,
+  projectId, sceneId, slotKey, slot, cameraMoves, autoVisuals = false, disabled = false, onChange,
 }: {
   projectId: string
   sceneId: string
@@ -1649,8 +2233,10 @@ function SlotCard({
   slot: Slot
   cameraMoves: string[]
   autoVisuals?: boolean
+  disabled?: boolean
   onChange: () => void
 }) {
+  const [editingText, setEditingText] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [removing, setRemoving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -1700,16 +2286,37 @@ function SlotCard({
   ) : null
 
   if (slot.content_type === 'text_block') {
+    if (editingText) {
+      return (
+        <TextBlockEditor
+          projectId={projectId}
+          sceneId={sceneId}
+          slotKey={slotKey}
+          slot={slot}
+          disabled={disabled}
+          onChange={onChange}
+          onDone={() => setEditingText(false)}
+        />
+      )
+    }
     return (
-      <div className="rounded-xl border border-border bg-inset p-3">
-        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink3">{slotKey}{dockBadge}</div>
+      <button
+        onClick={() => !disabled && setEditingText(true)}
+        disabled={disabled}
+        title="Edit the words on this card"
+        className="group w-full rounded-xl border border-border bg-inset p-3 text-left transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border"
+      >
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink3">{slotKey}{dockBadge}</span>
+          <Pencil className="h-3.5 w-3.5 text-ink3 opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
         {slot.heading && <div className="font-semibold text-primary">{slot.heading}</div>}
         <ul className="mt-1 space-y-0.5 text-sm text-foreground">
           {(slot.bullets || []).map((b, i) => (
             <li key={i} className="flex gap-1.5"><span className="text-primary">›</span>{b}</li>
           ))}
         </ul>
-      </div>
+      </button>
     )
   }
 
