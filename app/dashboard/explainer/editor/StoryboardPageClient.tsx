@@ -22,8 +22,11 @@ interface Slot {
   content_type: string
   label?: string
   camera_move?: string
-  asset_request?: { description?: string }
-  asset?: { url: string; type: string; name?: string } | null
+  // `instruction` is the user's own art direction, kept on the slot so a later
+  // render redraws the picture they approved rather than the original brief.
+  asset_request?: { description?: string; instruction?: string }
+  // `source` says who put the media there: 'ai' | 'stock' | 'sprite' | 'upload'.
+  asset?: { url: string; type: string; name?: string; source?: string } | null
   heading?: string
   bullets?: string[]
   body?: string
@@ -76,6 +79,15 @@ interface Storyboard {
   music_volume?: number
   music_track_id?: string | null
   music_categories?: string[]
+  // The user's own uploaded beds — private to them, offered on every project.
+  music_custom?: {
+    category: string
+    label: string
+    count: number
+    max: number
+    max_kilobytes: number
+    accept: string
+  }
   music_configured?: boolean
   music_provider?: string
   captions_enabled?: boolean
@@ -489,6 +501,53 @@ export function StoryboardPageClient() {
     if (musicOpen) void loadMusicTracks(musicCategory)
   }, [musicOpen, musicCategory, loadMusicTracks])
 
+  // ---- the user's OWN music -----------------------------------------------
+  // Uploaded once, private to them, and offered on every project from then on.
+  // It is just another category ('custom'), so the listing above already
+  // renders it; only adding and removing need their own handlers.
+  const customCategory = board?.music_custom?.category ?? 'custom'
+  const musicFileRef = useRef<HTMLInputElement | null>(null)
+  const [musicUploading, setMusicUploading] = useState(false)
+  const [musicUploadError, setMusicUploadError] = useState<string | null>(null)
+
+  const uploadMusic = async (file: File) => {
+    setMusicUploading(true)
+    setMusicUploadError(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await api.post('/api/music/library', fd)
+      // Land on the new track: switch the project to "my music" and select it,
+      // so uploading is one gesture rather than upload-then-hunt-for-it.
+      const track = res.data?.data?.track
+      await saveMusic(
+        { category: customCategory, ...(track?.id ? { track_id: track.id } : {}) },
+        `music-cat:${customCategory}`
+      )
+      await loadMusicTracks(customCategory)
+    } catch (err: any) {
+      setMusicUploadError(err?.response?.data?.message || 'That file could not be uploaded.')
+    } finally {
+      setMusicUploading(false)
+    }
+  }
+
+  const deleteMusic = async (trackId: string) => {
+    if (!confirm('Remove this track from your library? Videos already rendered with it are unaffected.')) return
+    stopPreview()
+    try {
+      await api.delete(`/api/music/library/${trackId}`)
+      // Dropping the track this project was using leaves it with no bed —
+      // clear the selection so the panel does not point at something gone.
+      if (board?.music_track_id === trackId) {
+        await saveMusic({ track_id: '' }, 'music-track:clear')
+      }
+      await loadMusicTracks(customCategory)
+    } catch {
+      alert('Failed to remove that track')
+    }
+  }
+
   const saveMusic = async (patch: Record<string, unknown>, key: string) => {
     await withPending(key, async () => {
       try {
@@ -824,19 +883,37 @@ export function StoryboardPageClient() {
           <div className="mb-4">
             <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink3">Style</div>
             <div className="flex flex-wrap gap-1.5">
-              {['auto', ...(board.music_categories ?? [])].map((cat) => (
+              {['auto', customCategory, ...(board.music_categories ?? [])].map((cat) => (
                 <button
                   key={cat}
                   onClick={() => handleMusicCategory(cat)}
                   disabled={groupPending('music-cat')}
-                  title={cat === 'auto' ? "Match the music to the storyboard's dominant mood" : undefined}
+                  title={
+                    cat === 'auto'
+                      ? "Match the music to the storyboard's dominant mood"
+                      : cat === customCategory
+                        ? 'Music you uploaded yourself — only you can see it'
+                        : undefined
+                  }
                   className={`rounded-lg border px-3 py-1.5 text-sm font-semibold capitalize transition-colors disabled:opacity-60 ${
                     musicCategory === cat
                       ? 'border-primary bg-primary text-primary-foreground'
                       : 'border-border bg-card text-muted-foreground hover:bg-inset'
                   }`}
                 >
-                  {isPending(`music-cat:${cat}`) ? <Loader2 className="mx-2 h-4 w-4 animate-spin" /> : cat}
+                  {isPending(`music-cat:${cat}`) ? (
+                    <Loader2 className="mx-2 h-4 w-4 animate-spin" />
+                  ) : cat === customCategory ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Upload className="h-3.5 w-3.5" />
+                      {board.music_custom?.label ?? 'My music'}
+                      {board.music_custom?.count ? (
+                        <span className="opacity-70">({board.music_custom.count})</span>
+                      ) : null}
+                    </span>
+                  ) : (
+                    cat
+                  )}
                 </button>
               ))}
             </div>
@@ -876,6 +953,41 @@ export function StoryboardPageClient() {
               </span>
             </div>
 
+            {musicCategory === customCategory && (
+              <div className="mb-2 rounded-xl border border-dashed border-border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs text-muted-foreground">
+                    Your own tracks — visible only to you, and offered on every project you make from now on.
+                    <span className="ml-1 text-ink3">
+                      mp3, wav, m4a, aac or ogg · up to{' '}
+                      {Math.round((board.music_custom?.max_kilobytes ?? 20480) / 1024)} MB ·{' '}
+                      {board.music_custom?.count ?? 0}/{board.music_custom?.max ?? 50} used
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => musicFileRef.current?.click()}
+                    disabled={musicUploading || (board.music_custom?.count ?? 0) >= (board.music_custom?.max ?? 50)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground disabled:opacity-50"
+                  >
+                    {musicUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {musicUploading ? 'Uploading…' : 'Upload music'}
+                  </button>
+                </div>
+                <input
+                  ref={musicFileRef}
+                  type="file"
+                  accept={board.music_custom?.accept ?? '.mp3,.wav,.m4a,.aac,.ogg'}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) void uploadMusic(f)
+                    e.target.value = ''
+                  }}
+                />
+                {musicUploadError && <p className="mt-1.5 text-xs text-warn">{musicUploadError}</p>}
+              </div>
+            )}
+
             {musicCategory === 'auto' || musicCategory === 'none' ? (
               <p className="text-sm text-muted-foreground">
                 {musicCategory === 'none'
@@ -887,6 +999,11 @@ export function StoryboardPageClient() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading tracks…
               </div>
             ) : musicTracks.length === 0 ? (
+              musicCategory === customCategory ? (
+                <p className="text-sm text-muted-foreground">
+                  Your library is empty. Upload a track above and it will be here for every video you make.
+                </p>
+              ) : (
               <p className="text-sm text-muted-foreground">
                 No auditionable tracks for this style
                 {board.music_configured === false
@@ -895,6 +1012,7 @@ export function StoryboardPageClient() {
                 The style still applies and the renderer falls back to its automatic pick. To get a list here, drop mp3s into{' '}
                 <code className="rounded bg-inset px-1 py-0.5 text-xs">storage/app/public/audio/{musicCategory}/</code>.
               </p>
+              )
             ) : (
               <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
                 {musicTracks.map((track) => {
@@ -940,6 +1058,17 @@ export function StoryboardPageClient() {
                           'Use'
                         )}
                       </button>
+                      {/* Only your own uploads are yours to delete; the
+                          catalogue is shared and read-only. */}
+                      {musicCategory === customCategory && (
+                        <button
+                          onClick={() => deleteMusic(track.id)}
+                          title="Remove from your library"
+                          className="shrink-0 rounded-lg border border-border p-1.5 text-ink3 hover:bg-inset hover:text-foreground"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   )
                 })}
@@ -2241,6 +2370,44 @@ function SlotCard({
   const [removing, setRemoving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // On-demand AI art. Only image slots: there is no model here that makes
+  // video, and a stock clip has its own fetcher.
+  const source = slot.asset?.source ?? 'upload'
+  const canGenerate = slot.content_type === 'image'
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
+  const [subject, setSubject] = useState(slot.asset_request?.description ?? '')
+  const [instruction, setInstruction] = useState(slot.asset_request?.instruction ?? '')
+  const busy = uploading || removing || generating || disabled
+
+  // Seed the fields from the slot every time the panel opens, not once on
+  // mount: an AI revision can rewrite the description underneath us, and
+  // editing a stale copy would silently revert it.
+  const openPanel = () => {
+    setSubject(slot.asset_request?.description ?? '')
+    setInstruction(slot.asset_request?.instruction ?? '')
+    setGenError(null)
+    setPanelOpen(true)
+  }
+
+  const generate = async () => {
+    setGenerating(true)
+    setGenError(null)
+    try {
+      await api.post(
+        `/api/explainer/projects/${projectId}/scenes/${sceneId}/slots/${slotKey}/generate`,
+        { description: subject, instruction }
+      )
+      await onChange()
+      setPanelOpen(false)
+    } catch (err: any) {
+      setGenError(err?.response?.data?.message || 'The image could not be generated.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   const updateCameraMove = async (move: string) => {
     try {
       await api.patch(`/api/explainer/projects/${projectId}/scenes/${sceneId}/slots/${slotKey}`, {
@@ -2736,23 +2903,59 @@ function SlotCard({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={slot.asset.url} alt="" className="h-32 w-full object-cover" />
           )}
+          {/* Where the picture came from. Without it an AI fill and a file the
+              user uploaded look identical, and the whole point of showing the
+              generated image is that they can tell it apart and redo it. */}
+          <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+            {source === 'ai' ? <><Sparkles className="h-3 w-3" /> AI</>
+              : source === 'stock' ? <><Film className="h-3 w-3" /> stock</>
+                : <><Upload className="h-3 w-3" /> yours</>}
+          </span>
           <button
             onClick={remove}
-            disabled={removing}
+            disabled={removing || busy}
+            title="Remove this media"
             className="absolute right-1.5 top-1.5 rounded-full bg-black/70 p-1 text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-70"
           >
             {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
           </button>
+          {generating && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60 text-xs font-semibold text-white">
+              <Loader2 className="h-5 w-5 animate-spin" /> Drawing…
+            </div>
+          )}
         </div>
       ) : (
-        <button
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center text-xs text-ink3 transition-colors hover:border-primary hover:text-primary"
-        >
-          {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
-          <span className="px-2">{slot.asset_request?.description || 'Upload media'}</span>
-        </button>
+        <div className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 text-center">
+          {generating ? (
+            <><Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span className="text-xs font-semibold text-primary">Drawing…</span></>
+          ) : (
+            <>
+              <span className="line-clamp-2 text-[11px] text-ink3">
+                {slot.asset_request?.description || 'No picture yet'}
+              </span>
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                {canGenerate && (
+                  <button
+                    onClick={openPanel}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
+                  >
+                    <Sparkles className="h-3 w-3" /> Generate with AI
+                  </button>
+                )}
+                <button
+                  onClick={() => inputRef.current?.click()}
+                  disabled={uploading || busy}
+                  className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-inset disabled:opacity-50"
+                >
+                  {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />} Upload
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       <input
@@ -2767,6 +2970,87 @@ function SlotCard({
         }}
       />
 
+      {/* Actions for a slot that already HAS media. Redrawing is offered on
+          every image slot, whatever is in it now — an upload can be replaced
+          by a generated picture just as easily as the other way round. */}
+      {slot.asset?.url && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {canGenerate && (
+            <button
+              onClick={() => (panelOpen ? setPanelOpen(false) : openPanel())}
+              disabled={busy}
+              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 ${
+                panelOpen ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:bg-inset'
+              }`}
+            >
+              <Sparkles className="h-3 w-3" /> {source === 'ai' ? 'Redraw with AI' : 'Replace with AI'}
+            </button>
+          )}
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading || busy}
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-inset disabled:opacity-50"
+          >
+            {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />} Upload instead
+          </button>
+        </div>
+      )}
+
+      {panelOpen && canGenerate && (
+        <div className="mt-2 rounded-lg border border-primary bg-card p-2.5">
+          <label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
+            What the picture shows
+          </label>
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            maxLength={400}
+            placeholder="a busy video rental counter in 1998"
+            className="mb-2 w-full rounded-lg border border-border bg-inset px-2 py-1.5 text-xs text-foreground outline-none placeholder:text-ink3 focus:border-primary"
+          />
+          <label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
+            Extra direction <span className="font-normal text-ink3">(optional — kept for future renders)</span>
+          </label>
+          <textarea
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            rows={2}
+            maxLength={400}
+            placeholder="seen from above, at night, no people in frame"
+            className="w-full resize-y rounded-lg border border-border bg-inset px-2 py-1.5 text-xs text-foreground outline-none placeholder:text-ink3 focus:border-primary"
+          />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[10px] text-ink3">
+              Drawn flat, in this video&apos;s palette, with no text — the house style.
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPanelOpen(false)}
+                className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-inset"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={generate}
+                disabled={generating}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
+              >
+                {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                {slot.asset?.url ? 'Draw again' : 'Draw it'}
+              </button>
+            </div>
+          </div>
+          {genError && <p className="mt-1.5 text-[11px] text-warn">{genError}</p>}
+        </div>
+      )}
+
+      {!panelOpen && slot.asset_request?.instruction && (
+        <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+          <Wand2 className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+          Your direction: “{slot.asset_request.instruction}”
+        </p>
+      )}
+
       {!slot.asset?.url && slot.stock_query && (
         <p className="mt-2 flex items-start gap-1.5 text-[11px] text-primary">
           <Film className="mt-0.5 h-3 w-3 shrink-0" />
@@ -2776,13 +3060,7 @@ function SlotCard({
       {!slot.asset?.url && !slot.stock_query && autoVisuals && (
         <p className="mt-2 flex items-start gap-1.5 text-[11px] text-primary">
           <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />
-          AI illustrates this automatically at render — upload only to override it.
-        </p>
-      )}
-      {!slot.asset?.url && !slot.stock_query && !autoVisuals && slot.asset_request?.description && (
-        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-ink3">
-          <ImageIcon className="mt-0.5 h-3 w-3 shrink-0" />
-          {slot.asset_request.description}
+          AI draws this at render anyway — generate now if you want to see it and shape it first.
         </p>
       )}
     </div>

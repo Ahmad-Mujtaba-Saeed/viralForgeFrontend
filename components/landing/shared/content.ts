@@ -273,7 +273,7 @@ export const TIERS: Tier[] = [
   {
     name: "Starter",
     dailyCredits: 100,
-    monthly: 5,
+    monthly: 10,
     description: "For getting started with daily content.",
     features: [
       "100 credits per day",
@@ -287,7 +287,7 @@ export const TIERS: Tier[] = [
   {
     name: "Creator",
     dailyCredits: 300,
-    monthly: 10,
+    monthly: 15,
     description: "For creators publishing every day.",
     features: [
       "300 credits per day",
@@ -302,7 +302,7 @@ export const TIERS: Tier[] = [
   {
     name: "Studio",
     dailyCredits: 1000,
-    monthly: 20,
+    monthly: 30,
     description: "For teams and high-volume output.",
     features: [
       "1000 credits per day",

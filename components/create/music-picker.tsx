@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Music2 } from 'lucide-react'
+import { Loader2, Music2, Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import api from '@/lib/axios'
 
@@ -46,6 +46,43 @@ export function MusicPicker({
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const browsable = category !== '' && category !== 'none' && category !== 'auto'
+  // The user's own uploaded beds. Served through the same endpoint as the
+  // catalogue, so the listing below needs no special case — only adding and
+  // removing do.
+  const isCustom = category === 'custom'
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const uploadTrack = async (file: File) => {
+    setUploading(true)
+    setUploadError(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await api.post('/api/music/library', fd)
+      const track = res.data?.data?.track
+      setReloadKey((k) => k + 1)
+      // Select what they just added — uploading is one gesture, not two.
+      if (track?.id) onChange({ music_category: 'custom', music_track_id: String(track.id) })
+    } catch (err: any) {
+      setUploadError(err?.response?.data?.message || 'That file could not be uploaded.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const deleteTrack = async (id: string) => {
+    stopAudio()
+    try {
+      await api.delete(`/api/music/library/${id}`)
+      if (trackId === id) onChange({ music_track_id: '' })
+      setReloadKey((k) => k + 1)
+    } catch {
+      setUploadError('That track could not be removed.')
+    }
+  }
 
   const stopAudio = () => {
     audioRef.current?.pause()
@@ -82,7 +119,7 @@ export function MusicPicker({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, browsable])
+  }, [category, browsable, reloadKey])
 
   const togglePreview = (track: Track) => {
     if (playingId === track.id) {
@@ -138,6 +175,23 @@ export function MusicPicker({
         </span>
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{track.title}</span>
         {dur && <span className="flex-shrink-0 text-[11px] tabular-nums text-ink3">{dur}</span>}
+        {/* Only your own uploads are yours to remove; the catalogue is shared.
+            A span, not a button — this row is itself a button. */}
+        {isCustom && (
+          <span
+            role="button"
+            tabIndex={-1}
+            aria-label={`Remove ${track.title}`}
+            title="Remove from your library"
+            onClick={(e) => {
+              e.stopPropagation()
+              void deleteTrack(track.id)
+            }}
+            className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-ink3 hover:bg-inset hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+          </span>
+        )}
         <span
           className={cn(
             'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border',
@@ -173,6 +227,35 @@ export function MusicPicker({
         <p className="mt-1.5 text-xs text-ink3">A track matching the video&apos;s mood is chosen automatically.</p>
       )}
 
+      {isCustom && (
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-border px-3 py-2.5">
+          <span className="text-xs text-muted-foreground">
+            Your own music — only you can see it, and it stays available for every video you make.
+          </span>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
+          >
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {uploading ? 'Uploading…' : 'Upload music'}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".mp3,.wav,.m4a,.aac,.ogg"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void uploadTrack(f)
+              e.target.value = ''
+            }}
+          />
+          {uploadError && <p className="w-full text-xs text-warn">{uploadError}</p>}
+        </div>
+      )}
+
       {browsable && (
         <div className="mt-2.5">
           {loading ? (
@@ -181,8 +264,10 @@ export function MusicPicker({
             </div>
           ) : tracks.length === 0 ? (
             <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-3 text-xs text-muted-foreground">
-              <Music2 className="h-3.5 w-3.5" /> No tracks available for this category yet — a random pick is used if any
-              become available.
+              <Music2 className="h-3.5 w-3.5" />{' '}
+              {isCustom
+                ? 'Your library is empty — upload a track above and it will be here for every video you make.'
+                : 'No tracks available for this category yet — a random pick is used if any become available.'}
             </div>
           ) : (
             <>
