@@ -22,17 +22,53 @@ export default function BillingPage() {
     startCheckout,
     changePlan,
     cancelSubscription,
+    syncCheckout,
   } = useBilling()
 
   const [interval, setInterval] = useState<'month' | 'year'>('month')
   const [busyPlan, setBusyPlan] = useState<number | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     fetchBilling().catch(() => {})
     fetchPlans().catch(() => {})
   }, [fetchBilling, fetchPlans])
+
+  // Safepay sends the customer back here after hosted checkout. The webhook is
+  // the source of truth but can land a beat later, so confirm the reference
+  // before telling the customer anything.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const params = new URLSearchParams(window.location.search)
+    const outcome = params.get('safepay')
+    if (!outcome) return
+
+    const reference = params.get('reference')
+    // Drop the query string so a refresh doesn't re-run the confirmation.
+    window.history.replaceState({}, '', '/dashboard/billing')
+
+    if (outcome === 'cancelled') {
+      setNotice('Checkout was cancelled — you have not been charged.')
+      return
+    }
+
+    if (outcome !== 'success' || !reference) return
+
+    setNotice('Confirming your subscription…')
+    syncCheckout(reference)
+      .then(async (res) => {
+        await fetchBilling()
+        setNotice(
+          res.status === 'completed'
+            ? 'You are subscribed. Your daily credits are ready.'
+            : 'Payment received. Your subscription will activate shortly.'
+        )
+      })
+      .catch(() => setNotice('Payment received. Your subscription will activate shortly.'))
+  }, [syncCheckout, fetchBilling])
 
   const visiblePlans = useMemo(() => {
     return plans
@@ -42,21 +78,20 @@ export default function BillingPage() {
 
   const handleSubscribe = async (p: Plan) => {
     setError(null)
+    setNotice(null)
     setBusyPlan(p.id)
     try {
-      if (hasSubscription) {
-        // Existing subscriber: switch the current subscription's plan in place
-        // (a second checkout would create a duplicate subscription).
-        await changePlan(p.id)
-        await fetchBilling()
-      } else {
-        const res = await startCheckout(p.id)
-        if (res?.checkoutUrl) {
-          window.location.href = res.checkoutUrl
-          return
-        }
-        setError('Could not start checkout. Please try again.')
+      // Safepay has no in-place plan swap: both paths end in hosted checkout.
+      // For an existing subscriber the backend first schedules the current
+      // subscription to stop renewing, so the two never overlap in billing.
+      const res = hasSubscription ? await changePlan(p.id) : await startCheckout(p.id)
+
+      if (res?.checkoutUrl) {
+        window.location.href = res.checkoutUrl
+        return
       }
+
+      setError('Could not start checkout. Please try again.')
     } catch (e: any) {
       setError(typeof e === 'string' ? e : 'Could not complete that action.')
     } finally {
@@ -117,6 +152,12 @@ export default function BillingPage() {
           </p>
         )}
       </div>
+
+      {notice && (
+        <div className="mb-6 rounded-xl border border-accent-line bg-accent-soft px-4 py-3 text-sm text-foreground">
+          {notice}
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 rounded-xl border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-warn">

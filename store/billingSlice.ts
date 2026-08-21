@@ -13,7 +13,8 @@ export interface Plan {
   interval_count: number
   subdesc?: string | null
   features?: string[] | null
-  stripe_price_id?: string | null
+  safepay_plan_id?: string | null
+  trial_period_days?: number
   is_active: boolean
 }
 
@@ -84,24 +85,46 @@ export const fetchPlans = createAsyncThunk(
   }
 )
 
+export interface CheckoutSession {
+  checkoutUrl: string
+  reference: string
+  hasTrial: boolean
+}
+
 export const startCheckout = createAsyncThunk(
   'billing/checkout',
   async (planId: number, { rejectWithValue }) => {
     try {
-      const res = await api.get(`/api/billing/stripe/create-subscription-session/${planId}`)
-      return res.data as { checkoutUrl: string; sessionId: string }
+      const res = await api.get(`/api/billing/safepay/create-subscription-session/${planId}`)
+      return res.data as CheckoutSession
     } catch (e: any) {
       return rejectWithValue(e.response?.data?.error || e.response?.data?.message || 'Failed to start checkout')
     }
   }
 )
 
+// Safepay creates the subscription inside its hosted checkout, so on return we
+// reconcile the reference before showing the new plan.
+export const syncCheckout = createAsyncThunk(
+  'billing/syncCheckout',
+  async (reference: string, { rejectWithValue }) => {
+    try {
+      const res = await api.get(`/api/billing/safepay/sync`, { params: { reference } })
+      return res.data as { status: 'completed' | 'pending'; subscription: BillingSubscription | null }
+    } catch (e: any) {
+      return rejectWithValue(e.response?.data?.message || 'Failed to confirm subscription')
+    }
+  }
+)
+
+// Safepay subscriptions are bound to the plan they were created against, so a
+// plan change winds the current one down and returns a fresh checkout URL.
 export const changePlan = createAsyncThunk(
   'billing/changePlan',
   async (planId: number, { rejectWithValue }) => {
     try {
       const res = await api.post(`/api/billing/subscription/change-plan/${planId}`)
-      return res.data
+      return res.data as Partial<CheckoutSession> & { message?: string }
     } catch (e: any) {
       return rejectWithValue(e.response?.data?.message || 'Failed to change plan')
     }

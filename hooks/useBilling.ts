@@ -6,6 +6,7 @@ import {
   startCheckout as startCheckoutThunk,
   changePlan as changePlanThunk,
   cancelSubscription as cancelSubscriptionThunk,
+  syncCheckout as syncCheckoutThunk,
 } from '@/store/billingSlice'
 
 export function useBilling() {
@@ -37,6 +38,12 @@ export function useBilling() {
     [dispatch]
   )
 
+  /** Confirm a subscription after Safepay redirects back from checkout. */
+  const syncCheckout = useCallback(
+    async (reference: string) => dispatch(syncCheckoutThunk(reference)).unwrap(),
+    [dispatch]
+  )
+
   /** Credit cost for a template type (falls back to default). */
   const costFor = useCallback(
     (templateType: string) => billing.templateCosts[templateType] ?? billing.defaultCost,
@@ -50,6 +57,7 @@ export function useBilling() {
     startCheckout,
     changePlan,
     cancelSubscription,
+    syncCheckout,
     costFor,
   }
 }
