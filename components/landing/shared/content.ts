@@ -436,13 +436,13 @@ export type DemoVideo = {
 }
 
 export const DEMO_VIDEO: DemoVideo = {
-  enabled: false,
+  enabled: true,
   src: "/demo/ai-explainer-demo.mp4",
   poster: "/demo/ai-explainer-poster.jpg",
   title: "AI Explainer Video — a full demo, script to render",
   description:
     "Watch the AI Explainer template turn a plain script into a narrated, animated explainer: scenes are planned, layouts chosen, visuals generated, narration recorded and captions synced — with no timeline editing.",
-  duration: undefined,
+  duration: "02:04",
   uploadDate: undefined,
 }
 
