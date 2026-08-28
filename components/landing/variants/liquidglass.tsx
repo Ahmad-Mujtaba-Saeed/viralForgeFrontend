@@ -57,7 +57,7 @@ import { BrandLogo } from "@/components/brand-logo"
  * Like the other variants it hardcodes its palette rather than reading app
  * theme tokens, so an admin can serve it regardless of the app's skin.
  * ------------------------------------------------------------------ */
-const C = {
+export const C = {
   bg: "#EAEEF9",
   bgSoft: "#F4F6FC",
   ink: "#0E1030",
@@ -76,15 +76,15 @@ const C = {
 }
 
 /** The signature spectral sweep — reused for gradient text, borders, glows. */
-const IRIS = `linear-gradient(110deg, ${C.blue}, ${C.lilac} 34%, ${C.pink} 66%, ${C.peach})`
+export const IRIS = `linear-gradient(110deg, ${C.blue}, ${C.lilac} 34%, ${C.pink} 66%, ${C.peach})`
 /** A calmer two–three stop version for solid CTAs (rainbow-lite, stays tasteful). */
-const CTA_GRAD = `linear-gradient(135deg, ${C.blue}, ${C.violet} 55%, ${C.pink})`
+export const CTA_GRAD = `linear-gradient(135deg, ${C.blue}, ${C.violet} 55%, ${C.pink})`
 
 /** A frosted white glass panel with a bright specular top edge. */
-const glassCard =
+export const glassCard =
   "rounded-[26px] border backdrop-blur-2xl backdrop-saturate-150 [background:rgba(255,255,255,0.55)] [border-color:rgba(255,255,255,0.8)]"
 
-const rise = {
+export const rise = {
   hidden: { opacity: 0, y: 26 },
   show: {
     opacity: 1,
@@ -93,7 +93,7 @@ const rise = {
   },
 }
 
-const stagger = {
+export const stagger = {
   hidden: {},
   show: { transition: { staggerChildren: 0.09 } },
 }
@@ -104,7 +104,7 @@ const iconFor = (slug: string) => TEMPLATE_ICONS_BY_SLUG[slug] ?? Wand2
 /* A soft pastel prism mesh: four large blurred pools of colour drifting
    over a cool near-white base, plus a fine grain to kill banding. One pool
    parallaxes with scroll so the field has depth instead of sitting flat. */
-function PrismBackdrop({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
+export function PrismBackdrop({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "34%"])
   const orbY = useSpring(y, { stiffness: 40, damping: 20 })
 
@@ -197,7 +197,7 @@ function PrismBackdrop({ scrollYProgress }: { scrollYProgress: MotionValue<numbe
 /* A frosted glass panel that paints a chromatic (blue→pink) sheen where the
    cursor is — the oil-slick-on-glass trick that makes a flat translucent
    surface read as a lit, physical pane. Lifts a touch on hover. */
-function Holo({
+export function Holo({
   children,
   className = "",
 }: {
@@ -253,7 +253,7 @@ function Holo({
 }
 
 /** A glass "lozenge" — the physical, specular-lit pill button of the language. */
-function Lozenge({
+export function Lozenge({
   href,
   children,
   primary = false,
@@ -300,7 +300,34 @@ function Lozenge({
 }
 
 /* ============================= Navbar ============================== */
-function Navbar({ scrollY }: { scrollY: MotionValue<number> }) {
+/**
+ * A nav entry that routes correctly whichever kind of target it has.
+ *
+ * NAV_LINKS now mixes real pages ("/pricing") with in-page anchors
+ * ("#templates"): a page must use next/link so it routes client-side instead of
+ * reloading the document, while an anchor must stay a plain <a> so the browser
+ * scrolls rather than navigating.
+ */
+function NavLink({
+  href,
+  children,
+  ...rest
+}: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  if (href.startsWith("/")) {
+    return (
+      <Link href={href} {...rest}>
+        {children}
+      </Link>
+    )
+  }
+  return (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  )
+}
+
+export function Navbar({ scrollY }: { scrollY: MotionValue<number> }) {
   const [open, setOpen] = React.useState(false)
   const [solid, setSolid] = React.useState(false)
   const { ready, isAuthenticated, initials } = useLandingAuth()
@@ -327,14 +354,14 @@ function Navbar({ scrollY }: { scrollY: MotionValue<number> }) {
 
           <div className="hidden items-center gap-1 md:flex">
             {NAV_LINKS.map((l) => (
-              <a
+              <NavLink
                 key={l.href}
                 href={l.href}
                 className="rounded-full px-3.5 py-2 text-[13.5px] font-medium transition-colors hover:bg-white/60"
                 style={{ color: C.ink2 }}
               >
                 {l.label}
-              </a>
+              </NavLink>
             ))}
           </div>
 
@@ -388,7 +415,7 @@ function Navbar({ scrollY }: { scrollY: MotionValue<number> }) {
           style={{ background: "rgba(255,255,255,0.85)", borderColor: C.line }}
         >
           {NAV_LINKS.map((l) => (
-            <a
+            <NavLink
               key={l.href}
               href={l.href}
               onClick={() => setOpen(false)}
@@ -396,7 +423,7 @@ function Navbar({ scrollY }: { scrollY: MotionValue<number> }) {
               style={{ color: C.ink2 }}
             >
               {l.label}
-            </a>
+            </NavLink>
           ))}
           <Link
             href={ready && isAuthenticated ? LINKS.app : LINKS.start}
@@ -727,7 +754,7 @@ function StatsStrip({ templates }: { templates: Template[] }) {
 }
 
 /* ========================== Section head =========================== */
-function SectionHead({
+export function SectionHead({
   id,
   eyebrow,
   title,
@@ -930,6 +957,13 @@ function Templates({ templates }: { templates: Template[] }) {
             )
           })}
         </motion.div>
+
+        <div className="mt-12 flex justify-center">
+          <Lozenge href="/templates">
+            Compare all templates
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Lozenge>
+        </div>
       </div>
     </section>
   )
@@ -1102,6 +1136,11 @@ function Faq() {
             )
           })}
         </motion.div>
+
+        <div className="mt-10 flex flex-wrap justify-center gap-3">
+          <Lozenge href="/faq">Read the full FAQ</Lozenge>
+          <Lozenge href="/how-it-works">How it works</Lozenge>
+        </div>
       </div>
     </section>
   )
@@ -1516,7 +1555,7 @@ function FinalCTA() {
 /* ============================= Footer ============================== */
 const SOCIAL_ICONS = { twitter: Twitter, instagram: Instagram, youtube: Youtube } as const
 
-function Footer() {
+export function Footer() {
   return (
     <footer className="border-t px-4 py-12 sm:px-6 lg:px-8" style={{ borderColor: C.lineSoft }}>
       <nav
@@ -1524,9 +1563,9 @@ function Footer() {
         className="mx-auto mb-10 flex max-w-6xl flex-wrap items-center justify-center gap-x-7 gap-y-3 text-[13.5px] font-semibold"
       >
         {NAV_LINKS.map((link) => (
-          <a key={link.href} href={link.href} style={{ color: C.ink2 }} className="hover:opacity-70">
+          <NavLink key={link.href} href={link.href} style={{ color: C.ink2 }} className="hover:opacity-70">
             {link.label}
-          </a>
+          </NavLink>
         ))}
         <Link href={LINKS.signIn} style={{ color: C.ink2 }} className="hover:opacity-70">
           Sign in

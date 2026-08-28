@@ -7,10 +7,40 @@
   command = "pnpm build"
   publish = "out"
 
-# Static export has no server, so deep links must fall through to the SPA shell.
-# `force` is deliberately unset: real files in out/ win, this only catches paths
-# that do not exist on disk.
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+# NOTE: there is deliberately NO `/* -> /index.html 200` catch-all here.
+#
+# It used to be present ("static export has no server, so deep links must fall
+# through to the SPA shell"), but that reasoning does not apply to this app:
+# `output: 'export'` writes one real .html file per route, and Netlify's
+# pretty-URL handling already maps /login -> login.html. Nothing needs the
+# fallback.
+#
+# What the catch-all DID do was answer every unknown path — typos, stale links,
+# scraper noise — with HTTP 200 and the full homepage. To a crawler that is an
+# unbounded supply of duplicate pages, reported in Search Console as "Soft 404"
+# and "Duplicate without user-selected canonical", and it dilutes the real
+# homepage. Without it, Netlify serves out/404.html with a genuine 404 status,
+# which is what a crawler needs to drop the URL.
+#
+# If a future route is added that is NOT prerendered to its own file (a dynamic
+# `[id]` segment, say), give that path its own narrow redirect rule — never a
+# site-wide one.
+
+# Long-lived immutable assets: hashed by the build, so they can be cached hard.
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Template card art and the social image change only on a deploy, and both are
+# fetched during first paint / link unfurls — a day of caching with
+# revalidation keeps repeat visits fast without pinning stale artwork.
+[[headers]]
+  for = "/templates/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, must-revalidate"
+
+[[headers]]
+  for = "/og/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, must-revalidate"

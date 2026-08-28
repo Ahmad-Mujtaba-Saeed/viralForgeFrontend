@@ -379,11 +379,10 @@ export const TIERS: Tier[] = [
 export const yearlyPrice = (monthly: number) => Math.round(monthly * 12 * 0.75)
 
 export const NAV_LINKS = [
-  { href: "#templates", label: "Templates" },
-  { href: "#how", label: "How it works" },
-  { href: "#features", label: "Features" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#faq", label: "FAQ" },
+  { href: "/templates", label: "Templates" },
+  { href: "/how-it-works", label: "How it works" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/faq", label: "FAQ" },
 ]
 
 /**
@@ -405,6 +404,200 @@ export const STATS: Stat[] = [
   { value: "100%", label: "AI voiceover & captions" },
   { value: "Daily", label: "credits that refill" },
 ]
+
+/* ------------------------------------------------------------------ *
+ * Per-template detail pages (/templates/<slug>)
+ *
+ * The landing card carries one sentence; a page that repeated only that would
+ * be a thin duplicate of the templates hub, which is worse for search than not
+ * existing. So each template gets its real inputs, the actual pipeline it runs,
+ * what lands in your downloads folder, and the questions people ask about it.
+ *
+ * Everything here is checked against the backend processors — the pipeline
+ * steps mirror getProcessingSteps(), and the settings mirror settings_schema.
+ * If a processor changes, this changes with it.
+ * ------------------------------------------------------------------ */
+
+/** URL slug for a template_type — also the filename of its card art. */
+export function templateSlug(key: string): string {
+  return key.replace(/_/g, "-")
+}
+
+export function templateKeyFromSlug(slug: string): string {
+  return slug.replace(/-/g, "_")
+}
+
+export type TemplateDetail = {
+  /** One line under the H1 on the template's own page. */
+  standfirst: string
+  /** What you hand it. */
+  inputs: string[]
+  /** What the pipeline actually does, in order. */
+  pipeline: { title: string; detail: string }[]
+  /** What you get back. */
+  outputs: string[]
+  /** Who it is for — the "should I pick this one" answer. */
+  bestFor: string[]
+  /** The knobs the create flow exposes. */
+  settings: string[]
+  faqs: Faq[]
+}
+
+export const TEMPLATE_DETAIL: Record<string, TemplateDetail> = {
+  ai_explainer_video: {
+    standfirst:
+      "The flagship. Give it a script or just a topic and it plans the whole video — scene by scene, layout by layout — then narrates, captions and renders it in widescreen.",
+    inputs: ["A written script, or just a topic to explain", "Optional: your own images or video for specific scenes"],
+    pipeline: [
+      { title: "Plan the scenes", detail: "The script is broken into scenes, each with its own purpose, mood and pacing. You get a storyboard you can read before anything renders." },
+      { title: "Choose a layout per scene", detail: "Each scene is cast to the card that fits its job — a chart, a labelled diagram, a step-by-step maths board, a comparison, a timeline, a bullet slide." },
+      { title: "Fill the visuals", detail: "AI images, stock b-roll and generated diagrams fill every slot. You can swap, redraw or art-direct any single image from the storyboard." },
+      { title: "Record the narration", detail: "A studio AI voice reads the script, and the word-level timings drive the on-screen reveals, so text appears exactly as it is spoken." },
+      { title: "Render and master", detail: "Camera moves, transitions, karaoke captions and a music bed that ducks under the voice. The final mix is mastered to −14 LUFS." },
+    ],
+    outputs: [
+      "A 16:9 widescreen MP4",
+      "Optional 9:16 and 1:1 versions of the same video in one job",
+      "An SRT caption file",
+      "A YouTube kit: chapters on the caption clock, a description and hashtags",
+      "A generated thumbnail",
+    ],
+    bestFor: [
+      "Teaching something that needs diagrams, not stock footage",
+      "Maths and science, which get a dedicated worked-example board",
+      "Turning a blog post, a lesson or documentation into video",
+    ],
+    settings: ["Voice", "Board style for maths videos", "Colour scheme, font pack and motion style", "Captions on or off", "Background music category and level"],
+    faqs: [
+      { q: "Can I edit it before it renders?", a: "Yes. The storyboard is editable scene by scene: rewrite narration, edit text cards, regenerate a scene's image with your own art direction, or leave a note asking the AI to rebuild specific cards." },
+      { q: "Does it handle maths properly?", a: "Yes. When the topic is a worked problem or a proof, it switches to a teacher's-board mode: equations are written out line by line with a write-along camera, steps are checked by substituting the answer back, and rule panels appear beside the working." },
+      { q: "Do I have to upload images?", a: "No. Visuals are generated or pulled from stock automatically. Uploading is optional, for scenes where you want your own product shots or screenshots." },
+    ],
+  },
+  yt_automation_short: {
+    standfirst:
+      "Take a video you already have and make a tighter, re-voiced vertical short out of it — same content, cut for a feed that scrolls.",
+    inputs: ["A video file you upload, or a YouTube link"],
+    pipeline: [
+      { title: "Transcribe", detail: "The original audio is transcribed with word-level timings." },
+      { title: "Rewrite the script", detail: "The transcript is rewritten tighter in the tone and length you choose — the point is a punchier version, not a copy." },
+      { title: "Re-record it", detail: "A studio AI voice reads the new script, so the short is not bound to the original delivery or pacing." },
+      { title: "Keep the frame on the speaker", detail: "Faces are detected and the 16:9 frame is cropped to 9:16 around whoever is talking, instead of chopping the sides off." },
+      { title: "Caption and assemble", detail: "Karaoke captions are burned in, transitions smoothed, and a thumbnail generated." },
+    ],
+    outputs: ["A 9:16 MP4 with burned-in captions", "A generated thumbnail"],
+    bestFor: [
+      "Getting shorts out of podcasts, talks and long uploads",
+      "Re-cutting an old video for a new platform",
+      "Tightening a rambling take without re-recording it yourself",
+    ],
+    settings: ["Rewrite style and tone", "Target length", "Voice", "Caption style", "Crop to faces, focus the main speaker, smooth transitions"],
+    faqs: [
+      { q: "Does it keep the original voice?", a: "No — it re-records the rewritten script in an AI voice, because the rewrite changes the words. If you want the original audio kept, use Long Video to Shorts instead: that one clips the source without re-voicing it." },
+      { q: "What if there is no face in the video?", a: "Face cropping is a setting you can switch off. With it off, the frame is centre-cropped to 9:16." },
+    ],
+  },
+  yt_gameplay_short: {
+    standfirst:
+      "One long video in, several ready-to-post shorts out. The strongest moments are found for you, the dead air is cut, and gameplay can run underneath.",
+    inputs: ["A YouTube link, or a video file you upload"],
+    pipeline: [
+      { title: "Transcribe the source", detail: "The whole video is transcribed so moments can be judged on what is actually said, not just on volume." },
+      { title: "Pick the best moments", detail: "Several clips are selected across the video — the count is yours to set — each one chosen to stand alone." },
+      { title: "Cut the dead air", detail: "Silences and filler inside each clip are removed, so a 60-second short is 60 seconds of content." },
+      { title: "Compose the frame", detail: "Cropped to 9:16, with optional satisfying gameplay footage stacked underneath — the format that holds attention on a scrolling feed." },
+      { title: "Caption every clip", detail: "Each short gets its own word-timed karaoke captions." },
+    ],
+    outputs: ["Several 9:16 MP4s from one job", "Word-timed captions burned into each"],
+    bestFor: [
+      "Mining a long upload for a week of shorts",
+      "Podcast and commentary channels",
+      "The gameplay-underneath format",
+    ],
+    settings: ["Number of clips", "Gameplay footage on or off", "Voice and caption style", "Silence-skipping"],
+    faqs: [
+      { q: "How many shorts do I get?", a: "Four by default, and you can change the count. Each is selected to work on its own rather than as a slice of a longer piece." },
+      { q: "Is the original audio kept?", a: "Yes. This template clips the source rather than re-voicing it, so the speaker's own delivery stays." },
+    ],
+  },
+  yt_compilation_short: {
+    standfirst:
+      "Give it a few links and a theme, and it builds one compilation — ranked across all the sources, re-narrated, and counted down.",
+    inputs: ["Two or three YouTube links", 'A theme, e.g. "30 Disaster Moments"'],
+    pipeline: [
+      { title: "Download and analyse", detail: "Each source is fetched, scene-detected and transcribed." },
+      { title: "Rank moments across all of them", detail: "Clips compete against every source at once, so the compilation is the best of the set rather than a few from each." },
+      { title: "Strip the original speech", detail: "Vocals are separated out of the clips, so nobody in the footage talks over your voiceover." },
+      { title: "Write and record commentary", detail: "Fresh commentary is written for the theme and read in a studio AI voice." },
+      { title: "Assemble the countdown", detail: "Clips are stitched with countdown overlays, captions and a thumbnail." },
+    ],
+    outputs: ["One 16:9 compilation MP4", "Optional burned-in captions", "A generated thumbnail"],
+    bestFor: ["Themed countdown channels", "Turning several sources into one longer upload", "Compilations without a day of manual editing"],
+    settings: ["Theme and clip count", "Voice and commentary tone", "Captions on or off", "Music category and level"],
+    faqs: [
+      { q: "Why remove the original speech?", a: "Because two voices at once is the thing that makes an automated compilation sound cheap. The clips keep their sound effects and atmosphere; only the speech is separated out, so your commentary sits on top cleanly." },
+      { q: "How many sources can I use?", a: "Up to three. The first is required, the other two optional." },
+    ],
+  },
+  ranking_moments_short: {
+    standfirst:
+      "One video becomes a countdown ranking — every moment scored, the winners ranked with star ratings on a colourful rail.",
+    inputs: ["A YouTube link, or a video file you upload"],
+    pipeline: [
+      { title: "Transcribe and score", detail: "The video is transcribed and every candidate moment scored for how well it stands alone." },
+      { title: "Rank the winners", detail: "The top moments are ordered into a countdown, each with a star rating." },
+      { title: "Build the ranking furniture", detail: "A vertical rank rail, a bold title card and per-rank colour treatment are composed over the clips." },
+      { title: "Pop the captions", detail: "Captions land one word at a time — the format that reads at a scroll." },
+    ],
+    outputs: ["A 9:16 ranking short, up to 60 seconds", "Star ratings and a rank rail burned in"],
+    bestFor: ["Top-5 and top-10 formats", "Making one video feel like an edit, not a clip", "Channels built on rankings"],
+    settings: ["Number of ranks", "Title text", "Voice and caption style", "Music category and level"],
+    faqs: [
+      { q: "How long is the output?", a: "Capped at 60 seconds, which is what the ranking format needs to stay tight and what the short-form feeds prefer." },
+      { q: "Can I set the order myself?", a: "The ranking is scored automatically. If you want a specific moment first, trim the source so that moment is the strongest one in it." },
+    ],
+  },
+  ai_image_based_shorts: {
+    standfirst:
+      "No footage, no problem. Type an idea and every scene is written, illustrated, animated and narrated from nothing.",
+    inputs: ["A prompt — an idea, a topic, a story premise"],
+    pipeline: [
+      { title: "Write the script", detail: "The prompt becomes a scene-by-scene script in the tone, purpose and length you pick." },
+      { title: "Generate an image per scene", detail: "Every scene gets its own image in your chosen visual style — cinematic, storyboard, animated, photo-real or cartoon." },
+      { title: "Animate the characters", detail: "Characters are detected in each image and given motion, so the short moves instead of being a slideshow." },
+      { title: "Narrate and caption", detail: "A studio AI voice reads the script and karaoke captions are burned in." },
+    ],
+    outputs: ["A 9:16 MP4 built entirely from generated visuals", "Burned-in captions", "A generated thumbnail"],
+    bestFor: ["Faceless channels with no footage library", "Listicles and explainers that need illustration", "Testing an idea before filming anything"],
+    settings: ["Scene count", "Visual style", "Tone and purpose", "Target length", "Voice and caption style"],
+    faqs: [
+      { q: "Do I need any footage or images?", a: "None. Everything on screen is generated from your prompt." },
+      { q: "Can I control the look?", a: "Yes — pick the visual style up front, and it is applied consistently across every scene so the short holds together." },
+    ],
+  },
+  ai_horror_shorts: {
+    standfirst:
+      "A premise in, a chilling narrated short out — story, visuals, atmosphere and captions, built for the dark-documentary format.",
+    inputs: ["A premise — a sentence is enough"],
+    pipeline: [
+      { title: "Write the story", detail: "The premise becomes a horror script written beat by beat, in the tone you choose: creepy, tense or jump-scare." },
+      { title: "Generate the visuals", detail: "Eerie images per scene in your chosen style — cinematic, cartoon horror, gothic or photo-real." },
+      { title: "Layer the atmosphere", detail: "Character effects and atmospheric treatment are applied over the stills." },
+      { title: "Narrate and caption", detail: "A voice suited to the tone reads the story, with captions burned in and ambience underneath." },
+    ],
+    outputs: ["A 9:16 horror short", "Burned-in captions", "A generated thumbnail"],
+    bestFor: ["Horror story channels", "The dark-documentary narration format", "Short creepypasta retellings"],
+    settings: ["Duration", "Visual style", "Tone", "Voice and caption style", "Ambience level"],
+    faqs: [
+      { q: "How long can it be?", a: "Between 15 and 35 seconds by default — the length the format works at. The story is written to fit the duration you pick rather than being cut to it." },
+      { q: "Is the music different from the other templates?", a: "Yes. This template has its own horror ambience library, which the other templates never draw from." },
+    ],
+  },
+}
+
+export function templateDetail(key: string): TemplateDetail | undefined {
+  return TEMPLATE_DETAIL[key]
+}
 
 /* ------------------------------------------------------------------ *
  * AI Explainer demo reel

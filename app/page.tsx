@@ -1,14 +1,7 @@
 import type { Metadata } from "next"
 import LandingLiquidGlass from "@/components/landing/variants/liquidglass"
-import {
-  TEMPLATES,
-  TIERS,
-  FAQS,
-  DEMO_VIDEO,
-  buildTemplatesFromApi,
-  type Template,
-  type PublicApiTemplate,
-} from "@/components/landing/shared/content"
+import { TIERS, DEMO_VIDEO } from "@/components/landing/shared/content"
+import { getTemplates } from "@/lib/templates"
 import { JsonLd } from "@/components/seo/json-ld"
 import {
   SITE,
@@ -18,7 +11,6 @@ import {
   websiteSchema,
   softwareApplicationSchema,
   templateListSchema,
-  faqSchema,
   videoSchema,
 } from "@/lib/seo"
 
@@ -40,26 +32,8 @@ export const metadata: Metadata = {
 
 // Liquid Glass is the single shipped landing design — the editorial, cinematic,
 // minimal and aurora variants remain in the codebase but are no longer served.
-async function getTemplates(): Promise<Template[]> {
-  const base = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
-  try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 2500)
-    const res = await fetch(`${base}/api/public/landing`, {
-      cache: "no-store",
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-    })
-    clearTimeout(timer)
-    if (!res.ok) return TEMPLATES
-    const data = await res.json()
-    const apiTemplates = Array.isArray(data?.templates) ? (data.templates as PublicApiTemplate[]) : null
-    return apiTemplates && apiTemplates.length > 0 ? buildTemplatesFromApi(apiTemplates) : TEMPLATES
-  } catch {
-    // Backend unreachable at render time — fall back to the static copy.
-    return TEMPLATES
-  }
-}
+// Template data comes from the shared loader so the landing and every marketing
+// sub-page read one cached response and cannot disagree about the catalogue.
 
 export default async function Home() {
   const templates = await getTemplates()
@@ -72,7 +46,8 @@ export default async function Home() {
     websiteSchema(),
     softwareApplicationSchema(TIERS),
     templateListSchema(templates),
-    faqSchema(FAQS),
+    // No FAQPage node here on purpose: /faq carries it, so exactly one URL is
+    // the answer to a question query rather than two competing for it.
   ]
 
   if (DEMO_VIDEO.enabled && DEMO_VIDEO.uploadDate) {

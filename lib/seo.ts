@@ -189,11 +189,12 @@ export function softwareApplicationSchema(
 
 /** The template catalogue, so search engines can surface individual templates. */
 export function templateListSchema(
-  templates: { key: string; name: string; description: string; image?: string }[]
+  templates: { key: string; name: string; description: string; image?: string }[],
+  path = '/'
 ) {
   return {
     '@type': 'ItemList',
-    '@id': `${SITE_URL}/#templates`,
+    '@id': `${SITE_URL}${path === '/' ? '' : path}#templates`,
     name: 'Vreato video templates',
     numberOfItems: templates.length,
     itemListElement: templates.map((t, i) => ({
@@ -210,10 +211,14 @@ export function templateListSchema(
   }
 }
 
-export function faqSchema(faqs: { q: string; a: string }[]) {
+/**
+ * `path` scopes the node id to the page emitting it — several pages carry their
+ * own FAQ block, and two nodes sharing one @id is a structured-data conflict.
+ */
+export function faqSchema(faqs: { q: string; a: string }[], path = '/') {
   return {
     '@type': 'FAQPage',
-    '@id': `${SITE_URL}/#faq`,
+    '@id': `${SITE_URL}${path === '/' ? '' : path}#faq`,
     mainEntity: faqs.map((f) => ({
       '@type': 'Question',
       name: f.q,
@@ -252,4 +257,42 @@ export function videoSchema(video: {
 /** Wraps any set of node objects into one @graph document. */
 export function graph(...nodes: object[]) {
   return { '@context': 'https://schema.org', '@graph': nodes }
+}
+
+/**
+ * The visible breadcrumb trail, restated for search engines. Google shows this
+ * as the path under a result instead of the raw URL, and it is one of the
+ * signals that tells it the site has a real hierarchy rather than one page.
+ *
+ * `items` must match the on-page <Breadcrumbs> exactly, last item = this page.
+ */
+export function breadcrumbSchema(items: { name: string; path: string }[]) {
+  return {
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: item.name,
+      item: `${SITE_URL}${item.path === '/' ? '' : item.path}`,
+    })),
+  }
+}
+
+/** One template, as a thing in its own right rather than a list entry. */
+export function templateSchema(t: {
+  name: string
+  description: string
+  path: string
+  image?: string
+}) {
+  return {
+    '@type': 'CreativeWork',
+    '@id': `${SITE_URL}${t.path}#template`,
+    name: t.name,
+    description: t.description,
+    url: `${SITE_URL}${t.path}`,
+    ...(t.image ? { image: `${SITE_URL}${t.image}` } : {}),
+    isPartOf: { '@id': `${SITE_URL}/#website` },
+    provider: { '@id': `${SITE_URL}/#organization` },
+  }
 }
