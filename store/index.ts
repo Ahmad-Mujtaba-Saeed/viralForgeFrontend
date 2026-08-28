@@ -66,6 +66,11 @@ export const store = configureStore({
     }),
 })
 
+// Calling persistStore is what actually starts persistence — it subscribes to
+// the store and dispatches REHYDRATE once localStorage has been read. Nothing
+// imports `persistor` any more (ReduxProvider deliberately dropped PersistGate
+// so pages prerender with real markup), but this call must stay: without it
+// nothing is ever written to or read from storage.
 export const persistor = persistStore(store)
 
 // Derive from the plain root reducer (not store.getState) so slice types stay

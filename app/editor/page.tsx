@@ -1,11 +1,11 @@
 "use client"
 
-import React from 'react'
+import React, { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import EditorEmbed from '@/components/editor/EditorEmbed'
 import api from '@/lib/axios'
 
-export default function EditorPage() {
+function EditorPageContent() {
   const params = useSearchParams()
   const videoUrlParam = params.get('videoUrl') || undefined
   const projectId = params.get('projectId') || undefined
@@ -86,5 +86,18 @@ export default function EditorPage() {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * useSearchParams() forces a client-side bail-out, which the static export
+ * refuses to prerender unless it sits inside a Suspense boundary — same shape
+ * the create / videos / storyboard pages already use.
+ */
+export default function EditorPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading editor…</div>}>
+      <EditorPageContent />
+    </Suspense>
   )
 }

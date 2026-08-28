@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils"
 import { useProject } from "@/hooks/useProject"
 import { useTemplates } from "@/hooks/useTemplates"
 import { TemplateArt, artKindFor, paletteFor } from "@/components/dashboard/template-art"
+import { templateImage } from "@/components/landing/shared/content"
+import { TemplateImage } from "@/components/template-image"
 
 type DurationType = "all" | "short" | "long"
 
@@ -181,6 +183,19 @@ export default function TemplatesPage() {
               className="pointer-events-none absolute -bottom-10 -left-6 h-44 w-44 rounded-full"
               style={{ background: "radial-gradient(circle, rgba(255,111,207,.55), transparent 70%)" }}
             />
+            {/* The template's own art, faded into the right edge. Masked and
+                held under the copy so the white headline keeps its contrast. */}
+            {templateImage(featured.templateType) && (
+              <div
+                className="pointer-events-none absolute inset-y-0 right-0 hidden w-[42%] opacity-45 sm:block"
+                style={{
+                  maskImage: "linear-gradient(to right, transparent, black 55%)",
+                  WebkitMaskImage: "linear-gradient(to right, transparent, black 55%)",
+                }}
+              >
+                <TemplateImage templateType={featured.templateType} alt="" decorative />
+              </div>
+            )}
             <div className="relative">
               <div className="flex items-center gap-2">
                 <span className="inline-block rounded-full bg-white/12 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
@@ -292,7 +307,16 @@ export default function TemplatesPage() {
               >
                 <div className="holo relative aspect-[16/11] overflow-hidden rounded-2xl" style={{ background: pal.bg }}>
                   <div className="absolute inset-0">
-                    <TemplateArt kind={artKindFor(template.templateType)} accent={pal.a} />
+                    {/* Real card art where we have it; the generative SVG stays
+                        as the fallback so a newly added template still renders. */}
+                    {templateImage(template.templateType) ? (
+                      <TemplateImage
+                        templateType={template.templateType}
+                        alt={`${template.name} template preview`}
+                      />
+                    ) : (
+                      <TemplateArt kind={artKindFor(template.templateType)} accent={pal.a} />
+                    )}
                   </div>
                   {template.enabled ? (
                     <span className="absolute left-2.5 top-2.5 rounded-md bg-black/30 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white backdrop-blur">

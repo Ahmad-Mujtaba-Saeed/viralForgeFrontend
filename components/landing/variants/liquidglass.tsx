@@ -29,7 +29,10 @@ import {
   STEPS,
   TESTIMONIALS,
   TIERS,
+  FAQS,
+  DEMO_VIDEO,
   NAV_LINKS,
+  SOCIAL_LINKS,
   STATS,
   LINKS,
   yearlyPrice,
@@ -38,6 +41,7 @@ import {
   type Template,
 } from "@/components/landing/shared/content"
 import { TemplateArt, artKindFor } from "@/components/dashboard/template-art"
+import { TemplateImage } from "@/components/template-image"
 import { useLandingAuth } from "@/components/landing/shared/useLandingAuth"
 import { BrandLogo } from "@/components/brand-logo"
 
@@ -448,7 +452,7 @@ function Hero({
           />
           {ready && isAuthenticated && firstName
             ? `Welcome back, ${firstName}`
-            : "AI video, start to finish"}
+            : "AI voiceover & captions included"}
         </motion.div>
 
         <motion.h1
@@ -458,7 +462,7 @@ function Hero({
           className="font-display mt-6 text-[42px] font-extrabold leading-[1.05] tracking-tight sm:text-[62px]"
           style={{ color: C.ink, letterSpacing: "-0.03em" }}
         >
-          Turn a script into
+          AI video, start to finish.
           <br />
           <span
             style={{
@@ -468,7 +472,7 @@ function Hero({
               color: "transparent",
             }}
           >
-            a video that travels.
+            A script in, a short out.
           </span>
         </motion.h1>
 
@@ -479,9 +483,11 @@ function Hero({
           className="mx-auto mt-5 max-w-xl text-[16.5px] leading-relaxed"
           style={{ color: C.ink2 }}
         >
-          Scripting, voiceover, captions, music and the edit — generated, synced
-          and rendered for you. Built for 9:16 shorts, and exports 16:9
-          widescreen for YouTube too. Post-ready in minutes, not weekends.
+          Vreato writes or rewrites the script, records a studio AI voiceover,
+          generates the visuals, syncs word-by-word captions and picks the
+          music — then renders the whole thing. Built for 9:16 YouTube Shorts,
+          Reels and TikTok, and it exports 16:9 widescreen too. Post-ready in
+          minutes, not weekends.
         </motion.p>
 
         <motion.div
@@ -494,9 +500,9 @@ function Hero({
             {ready && isAuthenticated ? "Open dashboard" : "Start creating free"}
             <ArrowRight className="h-[17px] w-[17px] transition-transform group-hover:translate-x-0.5" />
           </Lozenge>
-          <Lozenge href="#templates">
-            <Play className="h-4 w-4 fill-current" />
-            See what it makes
+          <Lozenge href="#demo">
+            <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+            Watch a demo
           </Lozenge>
         </motion.div>
       </motion.div>
@@ -722,11 +728,14 @@ function StatsStrip({ templates }: { templates: Template[] }) {
 
 /* ========================== Section head =========================== */
 function SectionHead({
+  id,
   eyebrow,
   title,
   accent,
   sub,
 }: {
+  /** Id for the <h2>, so the wrapping <section> can point aria-labelledby at it. */
+  id?: string
   eyebrow: string
   title: string
   accent?: string
@@ -747,6 +756,7 @@ function SectionHead({
         {eyebrow}
       </span>
       <h2
+        id={id}
         className="font-display mt-5 text-[32px] font-bold leading-[1.1] tracking-tight sm:text-[42px]"
         style={{ color: C.ink, letterSpacing: "-0.02em" }}
       >
@@ -774,17 +784,44 @@ function SectionHead({
 }
 
 /* ============================ Templates ============================ */
+/* Card art is a real image per template (AI-generated, one shared art
+   direction). TemplateArt stays as the fallback for any template the backend
+   adds before we have artwork for it, so a new template never renders an
+   empty box. */
+function TemplateVisual({
+  template,
+  className,
+  priority = false,
+}: {
+  template: Template
+  className?: string
+  priority?: boolean
+}) {
+  if (template.image) {
+    return (
+      <TemplateImage
+        templateType={template.key}
+        alt={`${template.name} template — ${template.tagline}`}
+        className={className ?? "h-full w-full object-cover"}
+        priority={priority}
+      />
+    )
+  }
+  return <TemplateArt kind={artKindFor(template.key)} accent={C.violet} />
+}
+
 function Templates({ templates }: { templates: Template[] }) {
   const [hero, ...rest] = templates
 
   return (
-    <section id="templates" className="px-4 py-24 sm:px-6 lg:px-8">
+    <section id="templates" aria-labelledby="templates-heading" className="px-4 py-24 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <SectionHead
+          id="templates-heading"
           eyebrow="What you can make"
-          title={`${templates.length} pipelines,`}
-          accent="one click."
-          sub="Every template is the whole job — script, voiceover, captions, music and the edit. Pick one and go."
+          title={`${templates.length} templates,`}
+          accent="one click each."
+          sub="Every template is the whole job — script, voiceover, captions, music and the edit. Read what goes in and what comes out, then pick one."
         />
 
         <motion.div
@@ -797,7 +834,7 @@ function Templates({ templates }: { templates: Template[] }) {
           {hero && (
             <motion.div variants={rise} className="sm:col-span-2">
               <Holo className="h-full">
-                <div className="grid h-full gap-0 sm:grid-cols-[1.05fr_1fr]">
+                <article className="grid h-full gap-0 sm:grid-cols-[1.05fr_1fr]">
                   <div className="flex flex-col justify-center p-7">
                     <div className="flex items-center gap-2">
                       {hero.badge && (
@@ -811,13 +848,18 @@ function Templates({ templates }: { templates: Template[] }) {
                       <span
                         className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-bold"
                         style={{ background: "rgba(15,16,48,0.05)", color: C.ink2 }}
+                        title={`${hero.credits} credits per render`}
                       >
-                        <Zap className="h-3 w-3" style={{ color: C.violet }} />
+                        <Zap className="h-3 w-3" style={{ color: C.violet }} aria-hidden="true" />
                         {hero.credits}
+                        <span className="sr-only">credits per render</span>
                       </span>
                     </div>
+                    <div className="mt-4 text-[10.5px] font-bold uppercase tracking-[0.12em]" style={{ color: C.ink3 }}>
+                      {hero.tagline}
+                    </div>
                     <h3
-                      className="font-display mt-4 text-[26px] font-bold leading-tight tracking-tight"
+                      className="font-display mt-1.5 text-[26px] font-bold leading-tight tracking-tight"
                       style={{ color: C.ink }}
                     >
                       {hero.name}
@@ -830,14 +872,14 @@ function Templates({ templates }: { templates: Template[] }) {
                       className="mt-5 inline-flex w-fit items-center gap-1.5 text-[13.5px] font-bold"
                       style={{ color: C.violet }}
                     >
-                      Use this template
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      Use the {hero.name} template
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                     </Link>
                   </div>
-                  <div className="relative min-h-[220px] overflow-hidden" style={{ background: "rgba(124,92,255,0.08)" }}>
-                    <TemplateArt kind={artKindFor(hero.key)} accent={C.violet} />
+                  <div className="relative min-h-[240px] overflow-hidden" style={{ background: "rgba(124,92,255,0.08)" }}>
+                    <TemplateVisual template={hero} priority className="absolute inset-0 h-full w-full object-cover" />
                   </div>
-                </div>
+                </article>
               </Holo>
             </motion.div>
           )}
@@ -846,39 +888,216 @@ function Templates({ templates }: { templates: Template[] }) {
             const Icon = iconFor(t.icon)
             return (
               <motion.div key={t.key} variants={rise}>
-                <Holo className="h-full p-6">
-                  <div className="flex h-full flex-col">
-                    <div className="flex items-start justify-between">
+                <Holo className="h-full">
+                  <article className="flex h-full flex-col">
+                    <div className="relative h-[164px] overflow-hidden" style={{ background: "rgba(124,92,255,0.07)" }}>
+                      <TemplateVisual template={t} className="absolute inset-0 h-full w-full object-cover" />
                       <span
-                        className="flex h-11 w-11 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-110"
+                        className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-bold backdrop-blur-md"
+                        style={{ background: "rgba(255,255,255,0.82)", color: C.ink2 }}
+                        title={`${t.credits} credits per render`}
+                      >
+                        <Zap className="h-3 w-3" style={{ color: C.violet }} aria-hidden="true" />
+                        {t.credits}
+                        <span className="sr-only">credits per render</span>
+                      </span>
+                      <span
+                        className="absolute left-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl backdrop-blur-md"
                         style={{
-                          background: "rgba(255,255,255,0.7)",
+                          background: "rgba(255,255,255,0.82)",
                           border: `1px solid ${C.line}`,
                           color: C.violet,
-                          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
                         }}
+                        aria-hidden="true"
                       >
-                        <Icon className="h-[21px] w-[21px]" />
-                      </span>
-                      <span
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-bold"
-                        style={{ background: "rgba(15,16,48,0.05)", color: C.ink2 }}
-                      >
-                        <Zap className="h-3 w-3" style={{ color: C.violet }} />
-                        {t.credits}
+                        <Icon className="h-[18px] w-[18px]" />
                       </span>
                     </div>
-                    <div className="mt-5 text-[10.5px] font-bold uppercase tracking-[0.12em]" style={{ color: C.ink3 }}>
-                      {t.tagline}
+                    <div className="flex flex-1 flex-col p-6">
+                      <div className="text-[10.5px] font-bold uppercase tracking-[0.12em]" style={{ color: C.ink3 }}>
+                        {t.tagline}
+                      </div>
+                      <h3 className="font-display mt-1.5 text-[18px] font-bold tracking-tight" style={{ color: C.ink }}>
+                        {t.name}
+                      </h3>
+                      <p className="mt-2 text-[13px] leading-relaxed" style={{ color: C.ink2 }}>
+                        {t.description}
+                      </p>
                     </div>
-                    <h3 className="font-display mt-1.5 text-[18px] font-bold tracking-tight" style={{ color: C.ink }}>
-                      {t.name}
-                    </h3>
-                    <p className="mt-2 text-[13px] leading-relaxed" style={{ color: C.ink2 }}>
-                      {t.description}
-                    </p>
-                  </div>
+                  </article>
                 </Holo>
+              </motion.div>
+            )
+          })}
+        </motion.div>
+      </div>
+    </section>
+  )
+}
+
+/* ============================ Demo reel ============================ */
+/* A reserved 16:9 slot for a real AI Explainer demo. Until DEMO_VIDEO.enabled
+   is flipped on (see components/landing/shared/content.ts) it renders a
+   labelled placeholder rather than a broken player — the frame, heading and
+   surrounding copy are the finished design either way, so dropping the file in
+   is the only remaining step. */
+function DemoReel({ templates }: { templates: Template[] }) {
+  const explainer =
+    templates.find((t) => t.key === "ai_explainer_video") ?? templates[0]
+
+  return (
+    <section id="demo" aria-labelledby="demo-heading" className="px-4 py-24 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <SectionHead
+          id="demo-heading"
+          eyebrow="See it work"
+          title="One script in."
+          accent="One finished explainer out."
+          sub="The AI Explainer template, start to finish — scenes planned, layouts chosen, visuals generated, narration recorded and captions synced. No timeline, no editing."
+        />
+
+        <motion.figure
+          variants={rise}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-60px" }}
+          className="mt-12"
+        >
+          <div
+            className={`relative overflow-hidden ${glassCard}`}
+            style={{
+              boxShadow: "0 50px 120px -40px rgba(40,32,110,0.45), inset 0 1px 0 rgba(255,255,255,0.9)",
+            }}
+          >
+            <div className="relative aspect-video w-full">
+              {DEMO_VIDEO.enabled ? (
+                <video
+                  className="absolute inset-0 h-full w-full object-cover"
+                  src={DEMO_VIDEO.src}
+                  poster={DEMO_VIDEO.poster}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  aria-label={DEMO_VIDEO.title}
+                >
+                  Your browser does not support embedded video.
+                </video>
+              ) : (
+                <DemoPlaceholder />
+              )}
+            </div>
+          </div>
+
+          <figcaption
+            className="mt-5 flex flex-col items-center justify-between gap-3 sm:flex-row"
+            style={{ color: C.ink2 }}
+          >
+            <p className="text-[13.5px] leading-relaxed">
+              Made with the{" "}
+              <strong style={{ color: C.ink }}>{explainer?.name ?? "AI Explainer Video"}</strong>{" "}
+              template — {explainer?.credits ?? 6} credits per render.
+            </p>
+            <Lozenge href={LINKS.start}>
+              Make one like this
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Lozenge>
+          </figcaption>
+        </motion.figure>
+      </div>
+    </section>
+  )
+}
+
+/* The empty state of the demo slot. Styled as a deliberate "reserved" frame so
+   it never reads as a broken embed while the video is still being produced. */
+function DemoPlaceholder() {
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-center"
+      style={{ background: `linear-gradient(135deg, rgba(91,140,255,0.10), rgba(255,111,207,0.10))` }}
+    >
+      <span
+        className="flex h-16 w-16 items-center justify-center rounded-full backdrop-blur-xl"
+        style={{
+          background: "rgba(255,255,255,0.75)",
+          border: `1px solid ${C.line}`,
+          boxShadow: "0 18px 40px -18px rgba(40,32,110,0.45)",
+        }}
+        aria-hidden="true"
+      >
+        <Play className="h-6 w-6 fill-current" style={{ color: C.violet }} />
+      </span>
+      <div className="px-6">
+        <p className="font-display text-[17px] font-bold tracking-tight" style={{ color: C.ink }}>
+          Demo video coming soon
+        </p>
+        <p className="mx-auto mt-1.5 max-w-sm text-[13px] leading-relaxed" style={{ color: C.ink2 }}>
+          A full AI Explainer walkthrough lands here shortly. In the meantime, the
+          templates below show exactly what each one takes in and gives back.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/* =============================== FAQ =============================== */
+/* Mirrors the FAQPage structured data emitted on the home page, so the answers
+   a crawler indexes are literally the answers a visitor reads. */
+function Faq() {
+  const [open, setOpen] = React.useState<number | null>(0)
+
+  return (
+    <section id="faq" aria-labelledby="faq-heading" className="px-4 py-24 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-3xl">
+        <SectionHead
+          id="faq-heading"
+          eyebrow="Questions"
+          title="Everything people ask"
+          accent="before signing up."
+        />
+
+        <motion.div
+          variants={stagger}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-60px" }}
+          className="mt-12 space-y-3"
+        >
+          {FAQS.map((faq, i) => {
+            const isOpen = open === i
+            return (
+              <motion.div key={faq.q} variants={rise}>
+                <div
+                  className={`overflow-hidden ${glassCard}`}
+                  style={{ borderColor: isOpen ? "rgba(124,92,255,0.35)" : undefined }}
+                >
+                  <h3>
+                    <button
+                      type="button"
+                      onClick={() => setOpen(isOpen ? null : i)}
+                      aria-expanded={isOpen}
+                      aria-controls={`faq-answer-${i}`}
+                      className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+                    >
+                      <span className="font-display text-[15.5px] font-bold tracking-tight" style={{ color: C.ink }}>
+                        {faq.q}
+                      </span>
+                      <ChevronDown
+                        className={`h-[18px] w-[18px] shrink-0 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}
+                        style={{ color: C.violet }}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </h3>
+                  <div
+                    id={`faq-answer-${i}`}
+                    hidden={!isOpen}
+                    className="px-6 pb-6 text-[14px] leading-relaxed"
+                    style={{ color: C.ink2 }}
+                  >
+                    {faq.a}
+                  </div>
+                </div>
               </motion.div>
             )
           })}
@@ -891,9 +1110,10 @@ function Templates({ templates }: { templates: Template[] }) {
 /* ========================== How it works =========================== */
 function HowItWorks() {
   return (
-    <section id="how" className="px-4 py-24 sm:px-6 lg:px-8">
+    <section id="how" aria-labelledby="how-heading" className="px-4 py-24 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <SectionHead
+          id="how-heading"
           eyebrow="How it works"
           title="Three steps."
           accent="No timeline."
@@ -1001,9 +1221,10 @@ function HowItWorks() {
 /* ============================ Features ============================= */
 function Features() {
   return (
-    <section id="features" className="px-4 py-24 sm:px-6 lg:px-8">
+    <section id="features" aria-labelledby="features-heading" className="px-4 py-24 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <SectionHead
+          id="features-heading"
           eyebrow="Everything included"
           title="No add-ons."
           accent="No per-word fees."
@@ -1051,9 +1272,9 @@ function Testimonials() {
   const loop = [...TESTIMONIALS, ...TESTIMONIALS]
 
   return (
-    <section className="overflow-hidden py-24">
+    <section id="reviews" aria-labelledby="reviews-heading" className="overflow-hidden py-24">
       <div className="px-4 sm:px-6 lg:px-8">
-        <SectionHead eyebrow="Creators" title="Built for people who" accent="post daily." />
+        <SectionHead id="reviews-heading" eyebrow="Creators" title="Built for people who" accent="post daily." />
       </div>
 
       <div className="relative mt-14">
@@ -1119,9 +1340,10 @@ function Pricing() {
   const price = (t: Tier) => (interval === "year" ? yearlyPrice(t.monthly) : t.monthly)
 
   return (
-    <section id="pricing" className="px-4 py-24 sm:px-6 lg:px-8">
+    <section id="pricing" aria-labelledby="pricing-heading" className="px-4 py-24 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <SectionHead
+          id="pricing-heading"
           eyebrow="Pricing"
           title="Credits that"
           accent="refill daily."
@@ -1292,9 +1514,28 @@ function FinalCTA() {
 }
 
 /* ============================= Footer ============================== */
+const SOCIAL_ICONS = { twitter: Twitter, instagram: Instagram, youtube: Youtube } as const
+
 function Footer() {
   return (
     <footer className="border-t px-4 py-12 sm:px-6 lg:px-8" style={{ borderColor: C.lineSoft }}>
+      <nav
+        aria-label="Footer"
+        className="mx-auto mb-10 flex max-w-6xl flex-wrap items-center justify-center gap-x-7 gap-y-3 text-[13.5px] font-semibold"
+      >
+        {NAV_LINKS.map((link) => (
+          <a key={link.href} href={link.href} style={{ color: C.ink2 }} className="hover:opacity-70">
+            {link.label}
+          </a>
+        ))}
+        <Link href={LINKS.signIn} style={{ color: C.ink2 }} className="hover:opacity-70">
+          Sign in
+        </Link>
+        <Link href={LINKS.start} style={{ color: C.ink2 }} className="hover:opacity-70">
+          Create an account
+        </Link>
+      </nav>
+
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 sm:flex-row">
         <Link href="/" className="flex items-center" aria-label="Vreato home">
           <BrandLogo height={26} tone="light" />
@@ -1304,18 +1545,26 @@ function Footer() {
           © {new Date().getFullYear()} Vreato. All rights reserved.
         </p>
 
-        <div className="flex items-center gap-2">
-          {[Twitter, Instagram, Youtube].map((Icon, i) => (
-            <a
-              key={i}
-              href="#"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border transition-colors hover:bg-white/70"
-              style={{ borderColor: C.line, color: C.ink2, background: C.glass }}
-            >
-              <Icon className="h-4 w-4" />
-            </a>
-          ))}
-        </div>
+        {SOCIAL_LINKS.length > 0 && (
+          <div className="flex items-center gap-2">
+            {SOCIAL_LINKS.map((link) => {
+              const Icon = SOCIAL_ICONS[link.icon]
+              return (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  aria-label={link.label}
+                  target="_blank"
+                  rel="noopener noreferrer me"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border transition-colors hover:bg-white/70"
+                  style={{ borderColor: C.line, color: C.ink2, background: C.glass }}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </a>
+              )
+            })}
+          </div>
+        )}
       </div>
     </footer>
   )
@@ -1351,11 +1600,13 @@ export default function LandingLiquidGlass({
       <Navbar scrollY={scrollY} />
       <Hero scrollYProgress={scrollYProgress} templates={templates} />
       <StatsStrip templates={templates} />
+      <DemoReel templates={templates} />
       <Templates templates={templates} />
       <HowItWorks />
       <Features />
       <Testimonials />
       <Pricing />
+      <Faq />
       <FinalCTA />
       <Footer />
     </main>
