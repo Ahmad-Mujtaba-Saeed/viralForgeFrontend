@@ -17,7 +17,7 @@ import {
   Smartphone, Images, MapPin, Newspaper,
   Calculator, Triangle, TrendingUp, Sparkles, Route, FileText, Eye, Lock,
   Palette, Pause, SlidersHorizontal, Check, Wand2, Send, Plus, CornerDownRight, Mic, Pencil,
-  Search, Library, Layers,
+  Search, Library, Layers, Wind,
 } from 'lucide-react'
 
 interface Slot {
@@ -159,6 +159,10 @@ interface Storyboard {
   board_style_auto?: string | null
   board_style_resolved?: string
   board_styles?: Record<string, { label: string; use_when: string; overrides_theme?: boolean }>
+  // Smoothness: the render clock, and the camera shutter on fast flights.
+  render_fps?: number
+  render_fps_options?: number[]
+  motion_blur?: boolean
   current_look?: string
   rendered_look?: string | null
   chapter_plan?: { chapters?: { id?: string; mode?: string; scene_ids?: string[] }[] } | null
@@ -768,6 +772,32 @@ export function StoryboardPageClient() {
     })
   }
 
+  const smoothFps = board?.render_fps ?? 30
+  const motionBlurOn = board?.motion_blur ?? true
+
+  const handleRenderFps = async (fps: number) => {
+    if (fps === smoothFps) return
+    await withPending(`render-fps:${fps}`, async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/smooth-motion`, { render_fps: fps })
+        await fetchBoard()
+      } catch {
+        alert('Failed to change the frame rate')
+      }
+    })
+  }
+
+  const handleToggleMotionBlur = async () => {
+    await withPending('motion-blur', async () => {
+      try {
+        await api.post(`/api/explainer/projects/${id}/smooth-motion`, { motion_blur: !motionBlurOn })
+        await fetchBoard()
+      } catch {
+        alert('Failed to toggle motion blur')
+      }
+    })
+  }
+
   const handleBoardStyle = async (style: string) => {
     if (style === (board?.board_style ?? 'auto')) return
     await withPending(`board-style:${style}`, async () => {
@@ -890,6 +920,19 @@ export function StoryboardPageClient() {
               <Grid3x3 className={`h-4 w-4 ${backdropOn ? 'text-primary' : 'text-ink3'}`} />
             )}
             Backdrop {backdropOn ? 'On' : 'Off'}
+          </button>
+          <button
+            onClick={handleToggleMotionBlur}
+            disabled={isPending('motion-blur')}
+            className={toggleBtn}
+            title="Blur the camera's fastest moves the way a shutter would, so quick flights read as motion instead of steps"
+          >
+            {isPending('motion-blur') ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : (
+              <Wind className={`h-4 w-4 ${motionBlurOn ? 'text-primary' : 'text-ink3'}`} />
+            )}
+            Motion blur {motionBlurOn ? 'On' : 'Off'}
           </button>
           <button
             onClick={handleToggleAutoVisuals}
@@ -1270,7 +1313,7 @@ export function StoryboardPageClient() {
       {/* Motion + skin. Both rows show a RECORDED loop of the real renderer
           on hover (see StylePicker) — the names alone never said what the
           setting does, and rendering a live sample per hover would be absurd. */}
-      {(board.motion_styles || board.skins) && (
+      {(board.motion_styles || board.skins || (board.render_fps_options?.length ?? 0) > 1) && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
           {board.motion_styles && (
             <StylePicker
@@ -1296,6 +1339,25 @@ export function StoryboardPageClient() {
                   hint: meta?.use_when,
                 })),
               ]}
+            />
+          )}
+          {(board.render_fps_options?.length ?? 0) > 1 && (
+            <StylePicker
+              group="fps"
+              title="Frame rate"
+              icon={<Gauge className="h-4 w-4 text-muted-foreground" />}
+              value={String(smoothFps)}
+              pendingKey={pendingKeyIn('render-fps')}
+              disabled={groupPending('render-fps')}
+              onSelect={(key) => handleRenderFps(Number(key))}
+              options={(board.render_fps_options ?? []).map((fps) => ({
+                key: String(fps),
+                label: `${fps} fps`,
+                hint:
+                  fps >= 60
+                    ? 'Every camera move travels half as far between frames — the smoothest result. Renders take about twice as long.'
+                    : 'The standard clock. Fast flights lean on motion blur to stay smooth.',
+              }))}
             />
           )}
           {board.skins && (
