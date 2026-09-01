@@ -1,0 +1,29 @@
+{
+  "motion": [
+    "crisp",
+    "classic",
+    "bounce",
+    "elegant",
+    "swiss"
+  ],
+  "skin": [
+    "flat",
+    "outline",
+    "print",
+    "blueprint"
+  ],
+  "composition": [
+    "slides",
+    "canvas_journey"
+  ],
+  "board": [
+    "slate",
+    "chalk",
+    "notebook"
+  ],
+  "font": [
+    "editorial",
+    "classic",
+    "tech"
+  ]
+}

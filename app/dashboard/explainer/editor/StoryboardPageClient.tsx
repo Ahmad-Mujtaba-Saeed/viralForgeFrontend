@@ -6,6 +6,7 @@ import api from '@/lib/axios'
 import { useBilling } from '@/hooks/useBilling'
 import { useProjectProgress } from '@/hooks/usePusher'
 import { ProcessingStartedDialog } from '@/components/create/processing-started-dialog'
+import { StylePicker } from './StylePicker'
 import {
   Loader2, Upload, X, Film, RefreshCw, Play, AlertTriangle,
   Image as ImageIcon, LayoutGrid, Columns2, Square, Shuffle, Move,
@@ -16,7 +17,7 @@ import {
   Smartphone, Images, MapPin, Newspaper,
   Calculator, Triangle, TrendingUp, Sparkles, Route, FileText, Eye, Lock,
   Palette, Pause, SlidersHorizontal, Check, Wand2, Send, Plus, CornerDownRight, Mic, Pencil,
-  Search, Library,
+  Search, Library, Layers,
 } from 'lucide-react'
 
 interface Slot {
@@ -287,6 +288,11 @@ export function StoryboardPageClient() {
   }, [])
   const isPending = (key: string) => Boolean(pending[key])
   const groupPending = (prefix: string) => Object.keys(pending).some((k) => k.startsWith(`${prefix}:`) && pending[k])
+  /** Which option of a group is mid-flight, for the pickers' spinner. */
+  const pendingKeyIn = (prefix: string) => {
+    const hit = Object.keys(pending).find((k) => k.startsWith(`${prefix}:`) && pending[k])
+    return hit ? hit.slice(prefix.length + 1) : null
+  }
 
   // Live style preview: one frozen frame of the REAL composition, refreshed
   // whenever a look-affecting setting changes. `previewScene` lets the user
@@ -1157,70 +1163,49 @@ export function StoryboardPageClient() {
           </div>
           {board.composition_mode === 'math_board' ? (
             board.board_styles && Object.keys(board.board_styles).length > 0 ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  Board:
-                  {(board.board_style ?? 'auto') === 'auto' && board.board_style_auto ? (
-                    <span className="ml-1 text-xs">({board.board_styles[board.board_style_auto]?.label ?? board.board_style_auto})</span>
-                  ) : null}
-                </span>
-                <div className="inline-flex overflow-hidden rounded-lg border border-border">
-                  {['auto', ...Object.keys(board.board_styles)].map((style) => (
-                    <button
-                      key={style}
-                      onClick={() => handleBoardStyle(style)}
-                      disabled={groupPending('board-style')}
-                      title={
-                        style === 'auto'
-                          ? 'Match the board to the topic: proofs get the chalkboard, worked problems the notebook'
-                          : board.board_styles?.[style]?.use_when
-                      }
-                      className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
-                        (board.board_style ?? 'auto') === style
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-card text-muted-foreground hover:bg-inset'
-                      }`}
-                    >
-                      {isPending(`board-style:${style}`) ? (
-                        <Loader2 className="mx-3 h-4 w-4 animate-spin" />
-                      ) : style === 'auto' ? (
-                        'Auto'
-                      ) : (
-                        board.board_styles?.[style]?.label ?? style
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <StylePicker
+                group="board"
+                title="Board"
+                value={board.board_style ?? 'auto'}
+                pendingKey={pendingKeyIn('board-style')}
+                disabled={groupPending('board-style')}
+                onSelect={handleBoardStyle}
+                options={[
+                  {
+                    key: 'auto',
+                    label: 'Auto',
+                    hint: 'Match the board to the topic: proofs get the chalkboard, worked problems the notebook.',
+                    autoLabel: board.board_style_auto
+                      ? (board.board_styles[board.board_style_auto]?.label ?? board.board_style_auto)
+                      : undefined,
+                  },
+                  ...Object.entries(board.board_styles).map(([key, meta]) => ({
+                    key,
+                    label: meta?.label ?? key,
+                    hint: meta?.use_when,
+                  })),
+                ]}
+              />
             ) : null
           ) : (
-          <div className="inline-flex overflow-hidden rounded-lg border border-border">
-            {(board.composition_modes ?? []).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => handleCompositionMode(mode)}
-                disabled={switchingMode !== null}
-                title={
-                  mode === 'hybrid'
-                    ? 'The AI mixes camera journeys and slide cuts to fit the script'
-                    : mode === 'canvas_journey'
-                      ? 'One continuous camera flight across every scene'
-                      : 'Classic scene-by-scene transitions'
-                }
-                className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
-                  board.composition_mode === mode
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-card text-muted-foreground hover:bg-inset'
-                }`}
-              >
-                {switchingMode === mode ? (
-                  <Loader2 className="mx-3 h-4 w-4 animate-spin" />
-                ) : (
-                  COMPOSITION_LABELS[mode] ?? mode
-                )}
-              </button>
-            ))}
-          </div>
+          <StylePicker
+            group="composition"
+            title="Composition"
+            value={board.composition_mode ?? ''}
+            pendingKey={switchingMode}
+            disabled={switchingMode !== null}
+            onSelect={handleCompositionMode}
+            options={(board.composition_modes ?? []).map((mode) => ({
+              key: mode,
+              label: COMPOSITION_LABELS[mode] ?? mode,
+              hint:
+                mode === 'hybrid'
+                  ? 'The AI mixes camera journeys and slide cuts to fit the script.'
+                  : mode === 'canvas_journey'
+                    ? 'One continuous camera flight across every scene.'
+                    : 'Classic scene-by-scene transitions.',
+            }))}
+          />
           )}
         </div>
       )}
@@ -1248,32 +1233,27 @@ export function StoryboardPageClient() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {board.font_packs && Object.keys(board.font_packs).length > 0 && (
-              <div className="inline-flex items-center gap-2">
-                <Type className="h-4 w-4 text-muted-foreground" />
-                <div className="inline-flex overflow-hidden rounded-lg border border-border">
-                  {['auto', ...Object.keys(board.font_packs)].map((pack) => (
-                    <button
-                      key={pack}
-                      onClick={() => handleFontPack(pack)}
-                      disabled={groupPending('font-pack')}
-                      title={pack === 'auto' ? 'Let the system pick the typography' : board.font_packs?.[pack]?.use_when}
-                      className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
-                        (board.font_pack ?? 'auto') === pack
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-card text-muted-foreground hover:bg-inset'
-                      }`}
-                    >
-                      {isPending(`font-pack:${pack}`) ? (
-                        <Loader2 className="mx-3 h-4 w-4 animate-spin" />
-                      ) : pack === 'auto' ? (
-                        'Auto'
-                      ) : (
-                        board.font_packs?.[pack]?.label ?? pack
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <StylePicker
+                group="font"
+                title="Type"
+                icon={<Type className="h-4 w-4 text-muted-foreground" />}
+                value={board.font_pack ?? 'auto'}
+                pendingKey={pendingKeyIn('font-pack')}
+                disabled={groupPending('font-pack')}
+                onSelect={handleFontPack}
+                options={[
+                  {
+                    key: 'auto',
+                    label: 'Auto',
+                    hint: 'Let the system pick the typography for the topic.',
+                  },
+                  ...Object.entries(board.font_packs).map(([key, meta]) => ({
+                    key,
+                    label: meta?.label ?? key,
+                    hint: meta?.use_when,
+                  })),
+                ]}
+              />
             )}
             <button
               onClick={handleShuffleTheme}
@@ -1287,73 +1267,62 @@ export function StoryboardPageClient() {
         </div>
       )}
 
+      {/* Motion + skin. Both rows show a RECORDED loop of the real renderer
+          on hover (see StylePicker) — the names alone never said what the
+          setting does, and rendering a live sample per hover would be absurd. */}
       {(board.motion_styles || board.skins) && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-soft">
           {board.motion_styles && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                Motion:
-                {(board.motion_style ?? 'auto') === 'auto' && board.motion_style_auto ? (
-                  <span className="ml-1 text-xs">({board.motion_styles[board.motion_style_auto]?.label ?? board.motion_style_auto})</span>
-                ) : null}
-              </span>
-              <div className="inline-flex overflow-hidden rounded-lg border border-border">
-                {['auto', ...Object.keys(board.motion_styles)].map((style) => (
-                  <button
-                    key={style}
-                    onClick={() => handleMotionStyle(style)}
-                    disabled={groupPending('motion-style')}
-                    title={style === 'auto' ? 'Let the AI match the motion to the topic' : board.motion_styles?.[style]?.use_when}
-                    className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
-                      (board.motion_style ?? 'auto') === style
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-card text-muted-foreground hover:bg-inset'
-                    }`}
-                  >
-                    {isPending(`motion-style:${style}`) ? (
-                      <Loader2 className="mx-3 h-4 w-4 animate-spin" />
-                    ) : style === 'auto' ? (
-                      'Auto'
-                    ) : (
-                      board.motion_styles?.[style]?.label ?? style
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <StylePicker
+              group="motion"
+              title="Motion"
+              icon={<Wand2 className="h-4 w-4 text-muted-foreground" />}
+              value={board.motion_style ?? 'auto'}
+              pendingKey={pendingKeyIn('motion-style')}
+              disabled={groupPending('motion-style')}
+              onSelect={handleMotionStyle}
+              options={[
+                {
+                  key: 'auto',
+                  label: 'Auto',
+                  hint: 'Let the AI match the motion to the topic.',
+                  autoLabel: board.motion_style_auto
+                    ? (board.motion_styles[board.motion_style_auto]?.label ?? board.motion_style_auto)
+                    : undefined,
+                },
+                ...Object.entries(board.motion_styles).map(([key, meta]) => ({
+                  key,
+                  label: meta?.label ?? key,
+                  hint: meta?.use_when,
+                })),
+              ]}
+            />
           )}
           {board.skins && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                Skin:
-                {(board.skin ?? 'auto') === 'auto' && board.skin_auto ? (
-                  <span className="ml-1 text-xs">({board.skins[board.skin_auto]?.label ?? board.skin_auto})</span>
-                ) : null}
-              </span>
-              <div className="inline-flex overflow-hidden rounded-lg border border-border">
-                {['auto', ...Object.keys(board.skins)].map((skin) => (
-                  <button
-                    key={skin}
-                    onClick={() => handleSkin(skin)}
-                    disabled={groupPending('skin')}
-                    title={skin === 'auto' ? 'Let the AI pick the surface treatment' : board.skins?.[skin]?.use_when}
-                    className={`px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
-                      (board.skin ?? 'auto') === skin
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-card text-muted-foreground hover:bg-inset'
-                    }`}
-                  >
-                    {isPending(`skin:${skin}`) ? (
-                      <Loader2 className="mx-3 h-4 w-4 animate-spin" />
-                    ) : skin === 'auto' ? (
-                      'Auto'
-                    ) : (
-                      board.skins?.[skin]?.label ?? skin
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <StylePicker
+              group="skin"
+              title="Skin"
+              icon={<Layers className="h-4 w-4 text-muted-foreground" />}
+              value={board.skin ?? 'auto'}
+              pendingKey={pendingKeyIn('skin')}
+              disabled={groupPending('skin')}
+              onSelect={handleSkin}
+              options={[
+                {
+                  key: 'auto',
+                  label: 'Auto',
+                  hint: 'Let the AI pick the surface treatment.',
+                  autoLabel: board.skin_auto
+                    ? (board.skins[board.skin_auto]?.label ?? board.skin_auto)
+                    : undefined,
+                },
+                ...Object.entries(board.skins).map(([key, meta]) => ({
+                  key,
+                  label: meta?.label ?? key,
+                  hint: meta?.use_when,
+                })),
+              ]}
+            />
           )}
         </div>
       )}
