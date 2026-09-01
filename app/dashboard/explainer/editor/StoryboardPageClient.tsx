@@ -16,17 +16,38 @@ import {
   Smartphone, Images, MapPin, Newspaper,
   Calculator, Triangle, TrendingUp, Sparkles, Route, FileText, Eye, Lock,
   Palette, Pause, SlidersHorizontal, Check, Wand2, Send, Plus, CornerDownRight, Mic, Pencil,
+  Search, Library,
 } from 'lucide-react'
 
 interface Slot {
   content_type: string
   label?: string
   camera_move?: string
-  // `instruction` is the user's own art direction, kept on the slot so a later
-  // render redraws the picture they approved rather than the original brief.
-  asset_request?: { description?: string; instruction?: string }
-  // `source` says who put the media there: 'ai' | 'stock' | 'sprite' | 'upload'.
+  // The media brief. `description` is the AI image PROMPT and always was;
+  // the other three are written for a human deciding what to go and find —
+  // `guidance` is the sentence shown under the slot, `search_query` seeds the
+  // free-media search box, `media_kind` says whether the beat wants a still
+  // or motion. `instruction` is the user's own art direction, kept on the slot
+  // so a later render redraws the picture they approved.
+  asset_request?: {
+    description?: string
+    instruction?: string
+    search_query?: string
+    guidance?: string
+    media_kind?: 'image' | 'video' | 'either'
+  }
+  // `source` says who put the media there: 'ai' | 'stock' | 'library' |
+  // 'sprite' | 'upload'.
   asset?: { url: string; type: string; name?: string; source?: string } | null
+  // Attribution for a picture taken from the free library. Lives on the slot,
+  // not the asset row, so it survives the file being replaced.
+  media_credit?: {
+    provider?: string
+    provider_label?: string
+    author?: string
+    source_url?: string
+    license?: string
+  }
   heading?: string
   bullets?: string[]
   body?: string
@@ -34,6 +55,33 @@ interface Slot {
   width_pct?: number
   frame?: string
   stock_query?: string
+}
+/** One free-media source, as the backend reports it. */
+interface MediaProvider {
+  name: string
+  label: string
+  kinds: string[]
+  needs_key: boolean
+  configured: boolean
+  cooling_down?: boolean
+  license: string
+  attribution_required: boolean
+}
+/** One search result, ready to drop into a slot. */
+interface MediaHit {
+  provider: string
+  provider_label: string
+  id: string
+  kind: 'image' | 'video'
+  thumb: string
+  width: number
+  height: number
+  orientation: string
+  duration: number | null
+  title: string
+  credit: { author?: string; author_url?: string; source_url?: string }
+  license: string
+  attribution_required: boolean
 }
 interface Scene {
   scene_id: string
@@ -90,6 +138,9 @@ interface Storyboard {
   }
   music_configured?: boolean
   music_provider?: string
+  // The free media library: whether any source can answer at all, and which
+  // ones — so the panel can name the sources and say what a key would unlock.
+  media_library?: { available: boolean; providers: MediaProvider[] }
   captions_enabled?: boolean
   backdrop_enabled?: boolean
   font_pack?: string
@@ -191,6 +242,8 @@ const TEMPLATE_ICON: Record<string, React.ReactNode> = {
   quote_portrait: <Quote className="h-4 w-4" />,
   phone_mockup: <Smartphone className="h-4 w-4" />,
   photo_stack: <Images className="h-4 w-4" />,
+  image_grid: <LayoutGrid className="h-4 w-4" />,
+  custom_card: <Wand2 className="h-4 w-4" />,
   map_card: <MapPin className="h-4 w-4" />,
   headline_ticker: <Newspaper className="h-4 w-4" />,
   math_steps: <Calculator className="h-4 w-4" />,
@@ -2125,6 +2178,7 @@ function SceneCard({
             slot={scene.slots[slotKey]}
             cameraMoves={cameraMoves}
             autoVisuals={Boolean(board.auto_visuals)}
+            mediaLibrary={board.media_library}
             disabled={revising}
             onChange={onChange}
           />
@@ -2353,13 +2407,191 @@ function TextBlockEditor({
   )
 }
 
-function SlotCard({
-  projectId, sceneId, slotKey, slot, cameraMoves, autoVisuals = false, disabled = false, onChange,
+/**
+ * The free media library, per slot.
+ *
+ * The third way to fill a picture slot, beside "Generate with AI" and an
+ * upload — and for most real-world subjects the best one, because a real
+ * photograph of a trading floor beats a diffusion model's idea of one.
+ *
+ * The search box is pre-seeded with the planner's own `search_query`, which is
+ * the point: the user opens the panel and the right results are already
+ * there. Picking one posts the provider + id + query — never a URL — and the
+ * server downloads it from its own copy of that result.
+ */
+function MediaLibraryPanel({
+  projectId, sceneId, slotKey, slot, providers, onClose, onChange,
 }: {
   projectId: string
   sceneId: string
   slotKey: string
   slot: Slot
+  providers: MediaProvider[]
+  onClose: () => void
+  onChange: () => void | Promise<void>
+}) {
+  const brief = slot.asset_request
+  const wantsVideo = slot.content_type === 'video' || brief?.media_kind === 'video'
+
+  const [query, setQuery] = useState(brief?.search_query || brief?.description?.slice(0, 60) || '')
+  const [kind, setKind] = useState<'image' | 'video'>(wantsVideo ? 'video' : 'image')
+  const [hits, setHits] = useState<MediaHit[]>([])
+  const [searching, setSearching] = useState(false)
+  const [adopting, setAdopting] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [searched, setSearched] = useState(false)
+
+  // A video slot can only take footage — offering the toggle would be a lie.
+  const kindLocked = slot.content_type === 'video'
+
+  const search = useCallback(async (q: string, k: 'image' | 'video') => {
+    const term = q.trim()
+    if (!term) return
+    setSearching(true)
+    setError(null)
+    try {
+      const res = await api.get(`/api/explainer/projects/${projectId}/media-search`, {
+        params: { query: term, kind: k },
+      })
+      setHits(res.data?.data?.results ?? [])
+      setSearched(true)
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'The search could not be run. Try again in a moment.')
+    } finally {
+      setSearching(false)
+    }
+  }, [projectId])
+
+  // Search once as soon as the panel opens: the whole promise of this feature
+  // is "here are pictures that fit this scene", not "here is a search box".
+  useEffect(() => {
+    if (query.trim()) void search(query, kind)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const use = async (hit: MediaHit) => {
+    setAdopting(hit.id)
+    setError(null)
+    try {
+      await api.post(
+        `/api/explainer/projects/${projectId}/scenes/${sceneId}/slots/${slotKey}/media`,
+        { provider: hit.provider, id: hit.id, query: query.trim(), kind: hit.kind },
+      )
+      await onChange()
+      onClose()
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'That file could not be used. Try another result.')
+    } finally {
+      setAdopting(null)
+    }
+  }
+
+  const usable = providers.filter((p) => p.configured && p.kinds.includes(kind))
+  const missing = providers.filter((p) => !p.configured)
+
+  return (
+    <div className="mt-2 rounded-lg border border-primary bg-card p-2.5">
+      <div className="mb-2 flex items-center gap-1.5">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void search(query, kind) }}
+          maxLength={80}
+          placeholder="busy trading floor"
+          className="min-w-0 flex-1 rounded-lg border border-border bg-inset px-2 py-1.5 text-xs text-foreground outline-none placeholder:text-ink3 focus:border-primary"
+        />
+        <button
+          onClick={() => void search(query, kind)}
+          disabled={searching || !query.trim()}
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
+        >
+          {searching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />} Search
+        </button>
+      </div>
+
+      {!kindLocked && (
+        <div className="mb-2 flex items-center gap-1">
+          {(['image', 'video'] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => { setKind(k); void search(query, k) }}
+              className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                kind === k ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-inset text-muted-foreground hover:bg-card'
+              }`}
+            >
+              {k === 'image' ? 'Photos' : 'Clips'}
+            </button>
+          ))}
+          <span className="ml-1 truncate text-[10px] text-ink3">
+            {usable.length > 0 ? usable.map((p) => p.label).join(' · ') : 'no source for this kind'}
+          </span>
+        </div>
+      )}
+
+      {searching && hits.length === 0 && (
+        <div className="flex h-24 items-center justify-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Searching the free libraries…
+        </div>
+      )}
+
+      {!searching && searched && hits.length === 0 && (
+        <p className="py-4 text-center text-[11px] text-muted-foreground">
+          Nothing found for “{query}”. Try fewer, plainer words — or draw it with AI instead.
+        </p>
+      )}
+
+      {hits.length > 0 && (
+        <div className="grid max-h-72 grid-cols-3 gap-1.5 overflow-y-auto">
+          {hits.map((hit) => (
+            <button
+              key={hit.id}
+              onClick={() => void use(hit)}
+              disabled={adopting !== null}
+              title={`${hit.title || hit.provider_label}${hit.credit?.author ? ` — ${hit.credit.author}` : ''}\n${hit.license}`}
+              className="group relative aspect-video overflow-hidden rounded-md border border-border bg-inset disabled:cursor-not-allowed"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={hit.thumb} alt={hit.title} loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+              <span className="absolute bottom-0 left-0 right-0 truncate bg-black/70 px-1 py-0.5 text-left text-[9px] font-semibold text-white">
+                {hit.provider_label}{hit.duration ? ` · ${hit.duration}s` : ''}
+              </span>
+              {adopting === hit.id && (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/60">
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {error && <p className="mt-1.5 text-[11px] text-warn">{error}</p>}
+
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="truncate text-[10px] text-ink3">
+          {missing.length > 0
+            ? `Add a ${missing.map((p) => p.label).join(' / ')} key in admin settings for more results.`
+            : 'Free to use. Creative Commons results keep their credit on the scene.'}
+        </span>
+        <button
+          onClick={onClose}
+          className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-inset"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function SlotCard({
+  projectId, sceneId, slotKey, slot, cameraMoves, autoVisuals = false, mediaLibrary, disabled = false, onChange,
+}: {
+  projectId: string
+  sceneId: string
+  slotKey: string
+  slot: Slot
+  mediaLibrary?: { available: boolean; providers: MediaProvider[] }
   cameraMoves: string[]
   autoVisuals?: boolean
   disabled?: boolean
@@ -2374,6 +2606,9 @@ function SlotCard({
   // video, and a stock clip has its own fetcher.
   const source = slot.asset?.source ?? 'upload'
   const canGenerate = slot.content_type === 'image'
+  // The free library serves both kinds — a video slot simply searches clips.
+  const canBrowse = Boolean(mediaLibrary?.available)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
@@ -2515,7 +2750,24 @@ function SlotCard({
   if (slot.content_type !== 'image' && slot.content_type !== 'video') {
     const s = slot as Record<string, any>
     let summary: React.ReactNode = null
-    if (slot.content_type === 'versus') {
+    if (slot.content_type === 'custom_html') {
+      // The bespoke card. Its markup is sanitised server-side, but the
+      // storyboard still shows only its TEXT — rendering a fragment here
+      // would make the dashboard trust that sanitiser completely, and the
+      // user can already SEE the real thing in the style preview, which is a
+      // genuine Remotion frame rather than a browser's guess at one.
+      const text = String(s.html ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+      const cues = (String(s.html ?? '').match(/data-(at|word)="/g) || []).length
+      summary = (
+        <div className="text-sm text-foreground">
+          <p className="line-clamp-3 text-muted-foreground">{text || 'An empty fragment'}</p>
+          <p className="mt-1.5 text-[11px] text-ink3">
+            Hand-built card · {cues > 0 ? `${cues} timed reveal${cues === 1 ? '' : 's'}` : 'no timed reveals'}
+            {s.css ? ' · custom styling' : ''} — see it in the style preview
+          </p>
+        </div>
+      )
+    } else if (slot.content_type === 'versus') {
       summary = (
         <div className="text-sm text-foreground">
           <span className="font-semibold text-primary">{s.left?.label || '?'}</span>
@@ -2909,7 +3161,8 @@ function SlotCard({
           <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
             {source === 'ai' ? <><Sparkles className="h-3 w-3" /> AI</>
               : source === 'stock' ? <><Film className="h-3 w-3" /> stock</>
-                : <><Upload className="h-3 w-3" /> yours</>}
+                : source === 'library' ? <><Library className="h-3 w-3" /> free</>
+                  : <><Upload className="h-3 w-3" /> yours</>}
           </span>
           <button
             onClick={remove}
@@ -2943,6 +3196,17 @@ function SlotCard({
                     className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
                   >
                     <Sparkles className="h-3 w-3" /> Generate with AI
+                  </button>
+                )}
+                {canBrowse && (
+                  <button
+                    onClick={() => { setPanelOpen(false); setLibraryOpen((open) => !open) }}
+                    disabled={busy}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 ${
+                      libraryOpen ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:bg-inset'
+                    }`}
+                  >
+                    <Library className="h-3 w-3" /> Free media
                   </button>
                 )}
                 <button
@@ -2984,6 +3248,17 @@ function SlotCard({
               }`}
             >
               <Sparkles className="h-3 w-3" /> {source === 'ai' ? 'Redraw with AI' : 'Replace with AI'}
+            </button>
+          )}
+          {canBrowse && (
+            <button
+              onClick={() => { setPanelOpen(false); setLibraryOpen((open) => !open) }}
+              disabled={busy}
+              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 ${
+                libraryOpen ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:bg-inset'
+              }`}
+            >
+              <Library className="h-3 w-3" /> Free media
             </button>
           )}
           <button
@@ -3042,6 +3317,42 @@ function SlotCard({
           </div>
           {genError && <p className="mt-1.5 text-[11px] text-warn">{genError}</p>}
         </div>
+      )}
+
+      {libraryOpen && canBrowse && (
+        <MediaLibraryPanel
+          projectId={projectId}
+          sceneId={sceneId}
+          slotKey={slotKey}
+          slot={slot}
+          providers={mediaLibrary?.providers ?? []}
+          onClose={() => setLibraryOpen(false)}
+          onChange={onChange}
+        />
+      )}
+
+      {/* The brief, in plain words: what shot works here and what to avoid.
+          It is the answer to "what am I supposed to put in this box?", which
+          the description alone — written as an image PROMPT — never gave. */}
+      {!libraryOpen && !panelOpen && slot.asset_request?.guidance && (
+        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+          <Eye className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+          <span>{slot.asset_request.guidance}</span>
+        </p>
+      )}
+
+      {/* Attribution for a library picture. Most of these licences require it
+          and all of them deserve it. */}
+      {slot.asset?.source === 'library' && slot.media_credit && (
+        <p className="mt-1.5 text-[10px] text-ink3">
+          {slot.media_credit.author ? `${slot.media_credit.author} · ` : ''}
+          {slot.media_credit.source_url ? (
+            <a href={slot.media_credit.source_url} target="_blank" rel="noreferrer" className="underline hover:text-primary">
+              {slot.media_credit.provider_label}
+            </a>
+          ) : slot.media_credit.provider_label}
+          {slot.media_credit.license ? ` · ${slot.media_credit.license}` : ''}
+        </p>
       )}
 
       {!panelOpen && slot.asset_request?.instruction && (

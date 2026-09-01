@@ -102,6 +102,7 @@ const PROVIDER_META: Record<string, { label: string; desc: string; keyNoun: stri
   pixabay: { label: 'Pixabay', desc: 'Royalty-free background music API (free key)', keyNoun: 'API key' },
   pexels: { label: 'Pexels', desc: 'Free stock footage API for explainer b-roll (free key)', keyNoun: 'API key' },
   jamendo: { label: 'Jamendo', desc: 'Creative Commons music API — read-only needs only a client_id', keyNoun: 'client_id' },
+  unsplash: { label: 'Unsplash', desc: 'Free photography API for explainer image slots (free key)', keyNoun: 'Access Key' },
 }
 
 function hasActiveKey(credentials: CredentialGroups | undefined, provider: string): boolean {
@@ -1122,10 +1123,21 @@ function AdminMusic() {
   )
 }
 
+type MediaProviderState = {
+  name: string
+  label: string
+  kinds: string[]
+  needs_key: boolean
+  configured: boolean
+  cooling_down?: boolean
+  license: string
+}
 type StockState = {
   pexels_configured: boolean
   pixabay_configured: boolean
   credentials: ApiKey[]
+  media_providers?: MediaProviderState[]
+  media_credentials?: CredentialGroups
 }
 
 function AdminStockFootage() {
@@ -1142,13 +1154,24 @@ function AdminStockFootage() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Every key manager posts the FULL grouped credential list back, so one
+  // handler keeps both pools and the derived "configured" flags in step.
   const applyCredentials = (credentials: CredentialGroups, successText: string) => {
     const pexels = credentials?.pexels ?? []
-    setState((prev) => ({
-      pexels_configured: pexels.some((k) => k.is_active),
-      pixabay_configured: prev?.pixabay_configured ?? false,
-      credentials: pexels,
-    }))
+    setState((prev) => {
+      if (!prev) return prev
+      const configuredNow = (name: string) =>
+        (credentials?.[name] ?? prev.media_credentials?.[name] ?? []).some((k) => k.is_active)
+      return {
+        ...prev,
+        pexels_configured: pexels.some((k) => k.is_active),
+        credentials: pexels,
+        media_credentials: { ...(prev.media_credentials ?? {}), ...credentials },
+        media_providers: (prev.media_providers ?? []).map((p) =>
+          p.needs_key ? { ...p, configured: configuredNow(p.name) } : p
+        ),
+      }
+    })
     setMsg({ kind: 'success', text: successText })
   }
 
@@ -1164,10 +1187,11 @@ function AdminStockFootage() {
           <Clapperboard className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-[16px] font-semibold text-foreground">Stock footage (Pexels)</h2>
+          <h2 className="text-[16px] font-semibold text-foreground">Free media library</h2>
           <p className="text-xs text-muted-foreground">
-            Admin only — the explainer template fetches free b-roll clips for scenes the AI marks as
-            stock footage. Free key from pexels.com/api.
+            Admin only — the sources the explainer searches for photos and footage, both for
+            automatic b-roll and for the &ldquo;Free media&rdquo; panel on every storyboard slot.
+            Openverse and Wikimedia Commons need no key at all.
           </p>
         </div>
       </div>
@@ -1182,19 +1206,36 @@ function AdminStockFootage() {
         <p className="py-4 text-sm text-ink3">Settings unavailable.</p>
       ) : (
         <div>
-          <span
-            className={cn(
-              'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
-              state.pexels_configured ? 'bg-good/10 text-good' : 'bg-warn-soft text-warn'
-            )}
-          >
-            {state.pexels_configured
-              ? `${state.credentials.filter((k) => k.is_active).length} active key(s)`
-              : state.pixabay_configured
-                ? 'No Pexels keys — b-roll falls back to Pixabay video'
-                : 'No keys — stock b-roll slots render as placeholders'}
-          </span>
+          {/* The roster. A source that needs no key is always on; one that
+              needs a key says so; one sitting out a cooldown after a failure
+              says that too, rather than quietly returning fewer results. */}
+          <div className="mb-4 flex flex-wrap gap-1.5">
+            {(state.media_providers ?? []).map((p) => (
+              <span
+                key={p.name}
+                title={`${p.license}${p.kinds.includes('video') ? ' · photos + video' : ' · photos'}`}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+                  p.cooling_down
+                    ? 'bg-warn-soft text-warn'
+                    : p.configured
+                      ? 'bg-good/10 text-good'
+                      : 'bg-inset text-ink3'
+                )}
+              >
+                {p.label}
+                <span className="opacity-70">
+                  {p.cooling_down
+                    ? '· unavailable'
+                    : p.configured
+                      ? p.needs_key ? '· keyed' : '· no key needed'
+                      : '· needs a key'}
+                </span>
+              </span>
+            ))}
+          </div>
 
+          <p className="mb-1.5 text-xs font-semibold text-muted-foreground">Pexels — photos and footage</p>
           <ProviderKeyManager
             provider="pexels"
             keys={state.credentials}
@@ -1204,10 +1245,21 @@ function AdminStockFootage() {
             onError={(text) => setMsg({ kind: 'error', text })}
           />
 
-          <p className="mt-3 text-xs text-ink3">
-            Pexels is tried first (better footage); the Pixabay video API (same key pool as background
-            music) is the automatic fallback. Clips are cached in storage per search query, so a query
-            is only ever downloaded once. Capped at 3 stock clips per video.
+          <p className="mb-1.5 mt-5 text-xs font-semibold text-muted-foreground">Unsplash — photos</p>
+          <ProviderKeyManager
+            provider="unsplash"
+            keys={state.media_credentials?.unsplash ?? []}
+            busy={keysBusy}
+            setBusy={setKeysBusy}
+            onCredentials={applyCredentials}
+            onError={(text) => setMsg({ kind: 'error', text })}
+          />
+
+          <p className="mt-4 text-xs text-ink3">
+            For automatic b-roll, Pexels is tried first and the Pixabay video API (same key pool as
+            background music, managed above) is the fallback; clips are cached per search query, and
+            a video is capped at 3 stock clips. The storyboard&apos;s Free media panel searches every
+            source above at once — a source that is slow or down is simply left out of the results.
           </p>
         </div>
       )}
