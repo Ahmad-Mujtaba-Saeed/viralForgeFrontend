@@ -44,7 +44,7 @@ type Props = {
 }
 
 /** Hover previews are decoration for anyone who asked not to see motion. */
-function usePrefersReducedMotion(): boolean {
+export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = React.useState(false)
   React.useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')

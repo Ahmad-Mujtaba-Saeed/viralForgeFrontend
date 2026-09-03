@@ -7,6 +7,7 @@ import { useBilling } from '@/hooks/useBilling'
 import { useProjectProgress } from '@/hooks/usePusher'
 import { ProcessingStartedDialog } from '@/components/create/processing-started-dialog'
 import { StylePicker } from './StylePicker'
+import { TransitionPicker } from './TransitionPicker'
 import {
   Loader2, Upload, X, Film, RefreshCw, Play, AlertTriangle,
   Image as ImageIcon, LayoutGrid, Columns2, Square, Shuffle, Move,
@@ -119,6 +120,8 @@ interface Storyboard {
   theme?: Theme
   camera_moves?: string[]
   transitions?: string[]
+  /** Registry transition_meanings — the one-line editorial sense of a cut. */
+  transition_meanings?: Record<string, string>
   color_schemes?: Theme[]
   narration_enabled?: boolean
   auto_visuals?: boolean
@@ -1479,11 +1482,12 @@ export function StoryboardPageClient() {
             </div>
           ) : (
             <div className="space-y-5">
-              {board.scenes.map((scene) => (
+              {board.scenes.map((scene, sceneIndex) => (
                 <SceneCard
                   key={scene.scene_id}
                   projectId={id}
                   scene={scene}
+                  index={sceneIndex}
                   board={board}
                   cameraMoves={board.camera_moves || []}
                   onChange={fetchBoard}
@@ -2108,10 +2112,13 @@ function LintReport({ report }: { report?: LintReportData | null }) {
 }
 
 function SceneCard({
-  projectId, scene, board, cameraMoves, onChange, onAskAi, targeted = false, revising = false,
+  projectId, scene, index, board, cameraMoves, onChange, onAskAi, targeted = false, revising = false,
 }: {
   projectId: string
   scene: Scene
+  /** Position on the board — the renderer decides "has an incoming cut" by
+      array position, not by `order`, so the picker must agree with it. */
+  index: number
   board: Storyboard
   cameraMoves: string[]
   onChange: () => void
@@ -2128,12 +2135,16 @@ function SceneCard({
   const wasAdded = last?.state === 'done' && (last.added ?? []).includes(scene.scene_id)
   const wasChanged = last?.state === 'done' && (last.changed ?? []).includes(scene.scene_id)
 
+  const [savingTransition, setSavingTransition] = useState(false)
   const updateTransition = async (t: string) => {
+    setSavingTransition(true)
     try {
       await api.patch(`/api/explainer/projects/${projectId}/scenes/${scene.scene_id}`, { transition: t })
       await onChange()
     } catch {
       alert('Failed to update transition')
+    } finally {
+      setSavingTransition(false)
     }
   }
 
@@ -2176,18 +2187,18 @@ function SceneCard({
               <Wand2 className="h-3 w-3" /> {targeted ? 'Selected' : 'Edit with AI'}
             </button>
           )}
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Film className="h-3 w-3" /> transition
-            <select
+          {/* The first scene has nothing to cut FROM — `scene[i].transition`
+              is the cut INTO scene i, so the control is meaningless there. */}
+          {index > 0 ? (
+            <TransitionPicker
               value={scene.transition}
-              onChange={(e) => updateTransition(e.target.value)}
-              className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-foreground outline-none focus:border-primary"
-            >
-              {(board.transitions || []).map((t) => (
-                <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
-              ))}
-            </select>
-          </label>
+              options={board.transitions || []}
+              meanings={board.transition_meanings}
+              onSelect={updateTransition}
+              disabled={revising || savingTransition}
+              saving={savingTransition}
+            />
+          ) : null}
         </div>
       </div>
 
