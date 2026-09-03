@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/sync-remotion.mjs && next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "sync:remotion": "node scripts/sync-remotion.mjs",
+    "check:remotion": "node scripts/sync-remotion.mjs --check"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -38,6 +40,8 @@
     "@radix-ui/react-toggle-group": "1.1.11",
     "@radix-ui/react-tooltip": "1.2.8",
     "@reduxjs/toolkit": "^2.11.2",
+    "@remotion/player": "4.0.484",
+    "@remotion/transitions": "4.0.484",
     "@vercel/analytics": "1.6.1",
     "autoprefixer": "^10.4.20",
     "axios": "^1.16.0",
@@ -57,10 +61,11 @@
     "react-dom": "^19",
     "react-hook-form": "^7.54.1",
     "react-phone-number-input": "^3.4.16",
-    "redux-persist": "^6.0.0",
     "react-redux": "^9.2.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
+    "redux-persist": "^6.0.0",
+    "remotion": "4.0.484",
     "sonner": "^1.7.1",
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",

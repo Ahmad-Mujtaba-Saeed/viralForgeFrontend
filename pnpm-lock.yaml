@@ -95,6 +95,12 @@ importers:
       '@reduxjs/toolkit':
         specifier: ^2.11.2
         version: 2.12.0(react-redux@9.3.0(@types/react@19.2.14)(react@19.2.4)(redux@5.0.1))(react@19.2.4)
+      '@remotion/player':
+        specifier: 4.0.484
+        version: 4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@remotion/transitions':
+        specifier: 4.0.484
+        version: 4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@vercel/analytics':
         specifier: 1.6.1
         version: 1.6.1(next@16.2.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
@@ -164,6 +170,9 @@ importers:
       redux-persist:
         specifier: ^6.0.0
         version: 6.0.0(react@19.2.4)(redux@5.0.1)
+      remotion:
+        specifier: 4.0.484
+        version: 4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       sonner:
         specifier: ^1.7.1
         version: 1.7.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1129,6 +1138,27 @@ packages:
       react-redux:
         optional: true
 
+  '@remotion/paths@4.0.484':
+    resolution: {integrity: sha512-JFJfr40lBGCcDlGHsnLbjbVjyok/Ctag4xDSeScMZr3F7frL4BL7PBzuBk8AMgEgNmVc3I3DRqGxOx8z1WVPhA==}
+
+  '@remotion/player@4.0.484':
+    resolution: {integrity: sha512-GdlYGl+Y+9aOqHy+/5IEynt/ZGfDATUXlC5WrHegXyNCw4zFaCmfXC6FLtfZNEYOdwMLZ0drQehrdzs5qONL8w==}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
+
+  '@remotion/shapes@4.0.484':
+    resolution: {integrity: sha512-gPEko27JbOgdSo0SqfGo24BYtpQ0sZ7KOcUwaCzxiDdUidQc5+lT6qjViKpxhJPoPuSKGA2iLuyqcgqQ1u4h6g==}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
+
+  '@remotion/transitions@4.0.484':
+    resolution: {integrity: sha512-E4MqFBxbArq7WXPeUGmWJXj5dUFqHoqbBBnF4tQI5NwIFWnqMMgvTxI3NguNzcaCCLHQbM5FhwKzqhMXFIimIQ==}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -1884,6 +1914,12 @@ packages:
 
   redux@5.0.1:
     resolution: {integrity: sha512-M9/ELqF6fy8FwmkpnF0S3YKOqMyoWJ4+CS5Efg2ct3oY9daQvd/Pc71FpGZsVsbl3Cpb+IIcjBDUnnyBdQbq4w==}
+
+  remotion@4.0.484:
+    resolution: {integrity: sha512-UJTgWindeUPqn5TTb55qOtRFhh96uTfVqJN20qb0ggi5Qq/T1OEY2nu1yi4CEbsM/+tpFDHV1aecrtrDykcdlA==}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
 
   reselect@5.2.0:
     resolution: {integrity: sha512-AgZ3UOZm3YndfrJ4OYjgrT7bmCm/1iqkjvEfH/oYjzh6PD2qw4QuT3jjnXIrpdt4MTpMXclMT3lXbmRY+XRakw==}
@@ -2879,6 +2915,29 @@ snapshots:
       react: 19.2.4
       react-redux: 9.3.0(@types/react@19.2.14)(react@19.2.4)(redux@5.0.1)
 
+  '@remotion/paths@4.0.484': {}
+
+  '@remotion/player@4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
+      remotion: 4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+
+  '@remotion/shapes@4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      '@remotion/paths': 4.0.484
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
+      remotion: 4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+
+  '@remotion/transitions@4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      '@remotion/paths': 4.0.484
+      '@remotion/shapes': 4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
+      remotion: 4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+
   '@standard-schema/spec@1.1.0': {}
 
   '@standard-schema/utils@0.3.0': {}
@@ -3528,6 +3587,11 @@ snapshots:
       redux: 5.0.1
 
   redux@5.0.1: {}
+
+  remotion@4.0.484(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+    dependencies:
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
 
   reselect@5.2.0: {}
 

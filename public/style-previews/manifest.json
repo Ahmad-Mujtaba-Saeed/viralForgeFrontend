@@ -25,5 +25,25 @@
     "editorial",
     "classic",
     "tech"
+  ],
+  "transition": [
+    "none",
+    "fade",
+    "push_left",
+    "push_right",
+    "push_up",
+    "push_down",
+    "wipe",
+    "wipe_up",
+    "zoom_through",
+    "zoom_out_in",
+    "whip_pan",
+    "mask_wipe_circle",
+    "mask_wipe_diagonal",
+    "column_reveal",
+    "split_slide",
+    "stack_push",
+    "line_sweep",
+    "match_dissolve"
   ]
 }

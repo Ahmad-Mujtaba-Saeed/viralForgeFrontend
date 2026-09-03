@@ -8,6 +8,7 @@ import { useProjectProgress } from '@/hooks/usePusher'
 import { ProcessingStartedDialog } from '@/components/create/processing-started-dialog'
 import { StylePicker } from './StylePicker'
 import { TransitionPicker } from './TransitionPicker'
+import { PreviewPlayer } from './PreviewPlayer'
 import {
   Loader2, Upload, X, Film, RefreshCw, Play, AlertTriangle,
   Image as ImageIcon, LayoutGrid, Columns2, Square, Shuffle, Move,
@@ -1707,6 +1708,9 @@ function StylePreview({
   onScene: (sceneId: string) => void
   onRetry: () => void
 }) {
+  // 'frame' is the default because it costs nothing and is already there; the
+  // player is a deliberate click, since it pulls a large bundle.
+  const [tab, setTab] = useState<'frame' | 'play'>('frame')
   const scenes = board.scenes
   const index = Math.max(0, scenes.findIndex((s) => s.scene_id === (sceneId ?? preview?.scene_id)))
   const step = (delta: number) => {
@@ -1721,10 +1725,32 @@ function StylePreview({
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-border px-3.5 py-2.5">
         <div className="flex min-w-0 items-center gap-2 text-sm">
           <Eye className="h-4 w-4 shrink-0 text-primary" />
-          <span className="font-semibold text-foreground">Style preview</span>
-          {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
+          <span className="font-semibold text-foreground">
+            {tab === 'frame' ? 'Style preview' : 'Play preview'}
+          </span>
+          {tab === 'frame' && loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
         </div>
         <div className="flex items-center gap-2">
+          {/* One frozen frame is the cheap answer to "what does this look
+              like"; playing it is the only answer to "how does it move". */}
+          <div className="inline-flex overflow-hidden rounded-lg border border-border">
+            {(['frame', 'play'] as const).map((key) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`px-2 py-1 text-[11px] font-semibold capitalize transition-colors ${
+                  tab === key
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-card text-muted-foreground hover:bg-inset hover:text-foreground'
+                }`}
+                title={key === 'frame' ? 'A single frozen frame' : 'Play the whole video in the browser'}
+              >
+                {key === 'play' ? <Play className="mr-1 inline h-3 w-3" /> : null}
+                {key}
+              </button>
+            ))}
+          </div>
+          {tab === 'frame' && (
           <div className="inline-flex items-center gap-1">
             <button
               onClick={() => step(-1)}
@@ -1746,9 +1772,21 @@ function StylePreview({
               ›
             </button>
           </div>
+          )}
         </div>
       </div>
 
+      {tab === 'play' ? (
+        <PreviewPlayer
+          projectId={String(board.id)}
+          aspectRatio={board.aspect_ratio}
+          look={board.current_look}
+          // Deliberately NOT wired to onScene: that refreshes the frozen
+          // frame, which is a server-side render. Crossing a scene boundary
+          // while playing would fire one per cut.
+        />
+      ) : (
+      <>
       <div className="relative bg-black" style={{ aspectRatio: ratio, maxHeight: '46vh' }}>
         {preview?.url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -1784,6 +1822,8 @@ function StylePreview({
           ? 'Your latest style changes — the render below is still the older look.'
           : 'A real frame of this video, no render needed. Change a colour scheme, font, skin or motion and it updates.'}
       </p>
+      </>
+      )}
     </div>
   )
 }

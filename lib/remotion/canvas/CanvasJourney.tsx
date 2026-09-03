@@ -1,0 +1,516 @@
+import React, { useMemo } from 'react';
+import { AbsoluteFill, Audio, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
+import { CanvasItem, CanvasPlan, Scene } from '../types';
+import { useTheme, isLightTheme } from '../theme';
+import { AmbientBackground } from '../components/AmbientBackground';
+import { PunchLine } from '../components/PunchLine';
+import { CaptionTrack } from '../components/CaptionTrack';
+import { normalizePlan } from './autoLayout';
+import { buildCamera } from './camera';
+import { cameraTrail } from './motionBlur';
+import { Ghost } from '../motion/ghost';
+import { Connector } from './Connector';
+import { SceneRegion } from './SceneRegion';
+import { PropSprite } from './PropSprite';
+import { SceneClockProvider } from './SceneClock';
+import { SfxCue, SfxName, sfxDuration } from '../sfx';
+
+/** The mood most scenes of this journey carry (ties → first seen). */
+const dominantMood = (scenes: Scene[]): string => {
+  const counts = new Map<string, number>();
+  for (const s of scenes) {
+    const m = s.mood ?? 'neutral';
+    counts.set(m, (counts.get(m) ?? 0) + 1);
+  }
+  let best = 'neutral';
+  let n = 0;
+  for (const [m, c] of counts) {
+    if (c > n) {
+      best = m;
+      n = c;
+    }
+  }
+  return best;
+};
+
+/**
+ * The direction a QUIET CUT moves, read off the scene's own transition.
+ *
+ * With the flight budget spent (§3.3) most cuts no longer move the camera at
+ * all, and a pure crossfade between two cards in the same frame is a
+ * dissolve — the flattest edit there is. So the `transition` the planner
+ * already chose, which until now did nothing in canvas mode (it drives the
+ * TransitionSeries in SLIDES mode only), finally means something here: the
+ * arriving card enters from the direction the cut implies, the departing one
+ * leaves the opposite way, and the relation's signature transition therefore
+ * reads on screen without a single camera move.
+ *
+ * Returns the arriving card's offset as a fraction of its own size, plus a
+ * zoom. The departing card takes the negative.
+ */
+const cutMotion = (transition: string | undefined): { dx: number; dy: number; zoom: number } => {
+  switch (transition) {
+    case 'push_left':
+    case 'stack_push':
+    case 'split_slide':
+      return { dx: 0.16, dy: 0, zoom: 1 };
+    case 'push_right':
+      return { dx: -0.16, dy: 0, zoom: 1 };
+    case 'push_up':
+    case 'wipe_up':
+      return { dx: 0, dy: 0.16, zoom: 1 };
+    case 'push_down':
+      return { dx: 0, dy: -0.16, zoom: 1 };
+    // A whip is the same gesture, harder and further.
+    case 'whip_pan':
+      return { dx: 0.26, dy: 0, zoom: 1 };
+    // The two zooms are the only cuts that are about depth rather than
+    // direction, so they scale instead of sliding.
+    case 'zoom_through':
+      return { dx: 0, dy: 0, zoom: 0.9 };
+    case 'zoom_out_in':
+      return { dx: 0, dy: 0, zoom: 1.1 };
+    // Diagonal and column wipes read as a slight diagonal drift.
+    case 'mask_wipe_diagonal':
+    case 'column_reveal':
+    case 'line_sweep':
+      return { dx: 0.08, dy: 0.05, zoom: 1 };
+    // fade / none / match_dissolve / the circle wipe: a true dissolve is the
+    // right answer for a callback or a soft beat. The card's own reveal
+    // carries it.
+    default:
+      return { dx: 0, dy: 0, zoom: 1 };
+  }
+};
+
+/**
+ * Which whoosh a flight deserves, from its story relation / treatment.
+ *
+ * Null for a scene that holds the frame: there is no flight, and a whoosh
+ * over a cut is the sound of a move the audience cannot see.
+ */
+const flightSound = (item: CanvasItem | undefined): { name: SfxName; volume: number } | null => {
+  const treatment = item?.treatment ?? 'same_frame';
+  const relation = item?.relation ?? 'continues';
+  if (treatment === 'same_frame') return null;
+  if (treatment === 'kinetic_break') return { name: 'whoosh_impact', volume: 1 };
+  if (treatment === 'zoom_nest') return { name: 'whoosh_deep', volume: 1 };
+  if (relation === 'consequence') return { name: 'whoosh_impact', volume: 1 };
+  if (treatment === 'pull_reveal' || relation === 'new_chapter') return { name: 'whoosh_rise', volume: 0.95 };
+  if (relation === 'callback') return { name: 'whoosh_rise', volume: 0.8 };
+  return { name: 'whoosh_soft', volume: 0.95 };
+};
+
+/**
+ * The cinematic canvas journey, v3 "isolated islands": every scene is a
+ * borderless composition region somewhere in a huge world, but scenes DON'T
+ * share the screen — only the scene the camera is on (plus, mid-flight, the
+ * one it is leaving) is visible. Neighbours fade in as the camera flies
+ * toward them and the departed scene dissolves behind us, so each stop feels
+ * like its own place rather than a station on a visible map. Nested scenes
+ * (zoom_nest) keep their parent visible as surrounding context, and the
+ * journey ENDS on the final scene — there is no closing overview.
+ */
+export const CanvasJourney: React.FC<{
+  /** Scenes this journey covers (the whole video, or one hybrid chapter). */
+  scenes: Scene[];
+  /** This journey's world plan; normalized/auto-laid-out when absent. */
+  plan?: CanvasPlan | null;
+  aspect?: string;
+  /** Karaoke caption track (§4.4) — screen-space, like punchlines. */
+  captions?: boolean;
+  /**
+   * Camera motion blur (§2.10). Default ON: the flights are fast enough that
+   * hard frames strobe. Turning it off restores the exact pre-blur render.
+   */
+  motionBlur?: boolean;
+}> = ({ scenes: scenesProp, plan: planProp, aspect, captions = false, motionBlur = true }) => {
+  const theme = useTheme();
+  const frame = useCurrentFrame();
+  const { fps, width: vw, height: vh } = useVideoConfig();
+
+  const scenes = useMemo(
+    () => [...(scenesProp ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [scenesProp]
+  );
+
+  const plan = useMemo(() => normalizePlan(planProp, scenes, aspect), [planProp, scenes, aspect]);
+
+  const camera = useMemo(() => buildCamera(plan, scenes, fps, vw, vh), [plan, scenes, fps, vw, vh]);
+
+  const itemByScene = useMemo(() => new Map(plan.items.map((item) => [item.scene_id, item])), [plan.items]);
+
+  if (!scenes.length) return null;
+
+  // The world's dot grid reads as white specks on dark themes; on a light
+  // (cream) theme it must be ink specks or it vanishes.
+  const dotColor = (alpha: number): string =>
+    isLightTheme(theme) ? `rgba(23,18,14,${alpha})` : `rgba(255,255,255,${alpha})`;
+
+  const cam = camera.at(frame);
+
+  // ---- Camera motion blur (§2.10) ------------------------------------------
+  // The camera peaks around 500px/frame on a long hop at 30fps; a hard-edged
+  // frame that jumps half a screen strobes. `cameraTrail` returns extra camera
+  // states across one shutter when — and only when — the frame is moving fast
+  // enough to need them, so holds (most of the video) cost nothing and render
+  // exactly as before.
+  const trail = cameraTrail(camera.at, frame, vw, vh, { enabled: motionBlur });
+  const worldSamples = trail.length ? trail : [{ cam, opacity: 1, step: 0 }];
+
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const smooth = (v: number) => {
+    const t = clamp01(v);
+    return t * t * (3 - 2 * t);
+  };
+
+  // ---- Scene isolation ------------------------------------------------------
+  // ONE scene at a time, strictly. The active scene is on; during a flight the
+  // arriving scene MATERIALISES out of thin air (fade + condense) while the
+  // departing one dissolves; everyone else simply does not exist. Nested
+  // (zoom_nest) scenes are NEVER previewed as a small picture-in-picture
+  // inside their parent — they only come into being mid-dive, and the parent
+  // dissolves away underneath them as the camera closes in.
+  let active = camera.windows.length - 1;
+  for (let k = 0; k < camera.windows.length; k++) {
+    if (frame < camera.windows[k].start + camera.windows[k].frames) {
+      active = k;
+      break;
+    }
+  }
+  const aw = camera.windows[active];
+  const local = frame - aw.start;
+  const inTravel = active > 0 && local < aw.travel;
+
+  const alphas = new Array<number>(scenes.length).fill(0);
+  // 0..1 birth progress of the arriving scene (drives its condense-in pop).
+  const enters = new Array<number>(scenes.length).fill(1);
+  // Changeover motion for a quiet cut — see cutMotion(). Empty on a flight.
+  const shifts = new Array<{ dx: number; dy: number; zoom: number } | undefined>(scenes.length).fill(undefined);
+
+  if (inTravel) {
+    const t = local / Math.max(1, aw.travel);
+    const arriving = itemByScene.get(scenes[active].scene_id);
+    const nested = Boolean(arriving?.parent_id);
+
+    if (nested) {
+      // The dive: the scene doesn't exist yet — it condenses into place as
+      // the camera closes in on the parent's focal point.
+      alphas[active] = smooth((t - 0.3) / 0.34);
+      enters[active] = alphas[active];
+      // The parent's picture carries most of the dive, then hands over.
+      alphas[active - 1] = 1 - smooth((t - 0.62) / 0.38);
+      // Deeper ancestors of the parent were already gone; leave them at 0.
+    } else if ((arriving?.treatment ?? '') === 'same_frame') {
+      // THE QUIET CUT. Both cards sit in the same box, so the changeover is
+      // the edit: the arriving card slides in over a fast ease while the
+      // departing one clears the frame the other way. Faster than a flight's
+      // crossfade on purpose — a cut that lingers is a dissolve.
+      const e = smooth(t);
+      alphas[active] = smooth(t / 0.55);
+      enters[active] = alphas[active];
+      alphas[active - 1] = 1 - smooth((t - 0.25) / 0.6);
+
+      const motion = cutMotion(scenes[active].transition);
+      shifts[active] = { dx: motion.dx * (1 - e), dy: motion.dy * (1 - e), zoom: 1 + (motion.zoom - 1) * (1 - e) };
+      // The outgoing card leaves the way the new one came from.
+      shifts[active - 1] = {
+        dx: -motion.dx * e * 0.7,
+        dy: -motion.dy * e * 0.7,
+        zoom: 1 - (motion.zoom - 1) * e * 0.7,
+      };
+    } else {
+      alphas[active] = smooth(t / 0.32);
+      enters[active] = alphas[active];
+
+      const relation = arriving?.relation ?? 'continues';
+      // Contrast beats hold the departing scene longer (the comparison is the
+      // point); everything else lets go just past mid-flight.
+      const fadeStart = relation === 'contrast' ? 0.72 : 0.55;
+      const leaving = 1 - smooth((t - fadeStart) / (1 - fadeStart));
+      alphas[active - 1] = Math.max(alphas[active - 1], leaving);
+
+      // Leaving a NESTED scene: from flight altitude the departed detail is
+      // microscopic, so the pull-out would read as flying over empty canvas.
+      // Its ancestor chain fades back in — we pull back OUT of the picture we
+      // dove into, then fly on (and it dissolves like any departing scene).
+      let up = itemByScene.get(scenes[active - 1].scene_id)?.parent_id ?? null;
+      let guard = 0;
+      while (up && guard++ < 12) {
+        const idx = scenes.findIndex((s) => s.scene_id === up);
+        if (idx < 0) break;
+        alphas[idx] = Math.max(alphas[idx], Math.min(leaving, smooth(t / 0.28)));
+        up = itemByScene.get(up)?.parent_id ?? null;
+      }
+
+      // Callback flights draw their line from an EARLIER scene — that endpoint
+      // fades in with the line and dissolves with the departure.
+      const conn = plan.connectors[active - 1];
+      if (conn && conn.from !== scenes[active - 1].scene_id) {
+        const fromIdx = scenes.findIndex((s) => s.scene_id === conn.from);
+        if (fromIdx >= 0) {
+          alphas[fromIdx] = Math.max(alphas[fromIdx], Math.min(leaving, smooth(t / 0.32)));
+        }
+      }
+    }
+  } else {
+    // Hold: the active scene lives alone — even a nested scene's parent stays
+    // gone (the camera is so deep inside that only raw canvas surrounds it).
+    alphas[active] = 1;
+  }
+
+  // Level of detail: how large a region currently appears on screen (as a
+  // fraction of the viewport width). Deeply nested scenes stay hidden until
+  // the camera is close enough for them to read as a picture-in-picture.
+  const lodFor = (w: number): number => {
+    const frac = (w * cam.scale) / vw;
+    return Math.max(0, Math.min(1, (frac - 0.03) / 0.05));
+  };
+
+  // Parents render beneath their nested children.
+  const renderOrder = scenes
+    .map((scene, i) => ({ scene, i, item: itemByScene.get(scene.scene_id) }))
+    .filter((e) => e.item)
+    .sort((a, b) => (a.item!.depth ?? 0) - (b.item!.depth ?? 0) || a.i - b.i);
+
+  // Everything that lives INSIDE the camera transform, built once as an element
+  // tree and reused by every shutter sample: the ghosts must show the same
+  // content at the same instant, differing only in where the camera was.
+  const worldInner = (
+    <>
+        {/* Dot grid pinned to the world: the one texture in the design, and the
+            only thing that tells the eye the camera is moving across a surface
+            rather than cutting between scenes. Barely there on purpose. */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `radial-gradient(${dotColor(0.07)} 1.6px, transparent 1.6px)`,
+            backgroundSize: '190px 190px',
+          }}
+        />
+
+        {/* Guide lines, drawn beneath the regions. A connector only exists
+            around its own flight: it draws ahead of the camera, then fades
+            away shortly after touchdown — no breadcrumb map accumulates. */}
+        <svg
+          width={plan.world.width}
+          height={plan.world.height}
+          viewBox={`0 0 ${plan.world.width} ${plan.world.height}`}
+          style={{ position: 'absolute', inset: 0 }}
+        >
+          {plan.connectors.map((conn, i) => {
+            if (conn.style === 'none') return null;
+            const from = itemByScene.get(conn.from);
+            const to = itemByScene.get(conn.to);
+            const w = camera.windows[i + 1];
+            if (!from || !to || !w) return null;
+
+            const linger = Math.round(fps * 0.45);
+            const fadeLen = Math.round(fps * 0.6);
+            const fadeAt = w.start + w.travel + linger;
+            if (frame < w.start || frame > fadeAt + fadeLen) return null;
+            const opacity = frame <= fadeAt ? 1 : 1 - (frame - fadeAt) / fadeLen;
+
+            return (
+              <Connector
+                key={`${conn.from}->${conn.to}`}
+                from={from}
+                to={to}
+                hopIndex={i}
+                progress={camera.travelProgressEased(i + 1, frame)}
+                opacity={opacity}
+                label={conn.label}
+                style={conn.style === 'arrow' || conn.style === 'curve' || conn.style === 'straight' ? 'arrow' : 'dotted'}
+              />
+            );
+          })}
+        </svg>
+
+        {/* Scene regions (parents first, nested children above them). */}
+        {renderOrder.map(({ scene, i, item }) => {
+          const w = camera.windows[i];
+          const next = camera.windows[i + 1];
+          // Nested scenes materialise mid-dive, so their content must spring
+          // in earlier or the newborn region arrives as an empty plate; a
+          // contrast scene must be readable DURING the shared-frame beat.
+          const contentDelay =
+            item!.treatment === 'same_frame'
+              ? // On a cut there is no landing to wait for: the card is the
+                // edit, so its own choreography starts as the changeover does.
+                0.15
+              : item!.parent_id
+                ? 0.35
+                : item!.relation === 'contrast'
+                  ? 0.38
+                  : 0.55;
+          return (
+            <SceneRegion
+              key={scene.scene_id}
+              item={item!}
+              scene={scene}
+              index={i}
+              count={scenes.length}
+              focus={camera.focus(i, frame)}
+              lod={lodFor(item!.w)}
+              alpha={alphas[i]}
+              enter={enters[i]}
+              shift={shifts[i]}
+              clock={{
+                // Content starts revealing just before touchdown so the region
+                // is alive the moment the camera lands. The cold open (scene 1)
+                // starts immediately — the camera IS already inside it, and a
+                // frameless region with unrevealed content is a blank screen.
+                start: w.start + (i === 0 ? 0 : Math.round(w.travel * contentDelay)),
+                end: w.start + w.frames,
+                // Narration audio plays from the scene window start — word-
+                // synced overlays (punchlines) anchor here.
+                narrationStart: w.start,
+                // Full on-screen life of the region (flight in -> faded out
+                // during the next flight); slot videos only mount inside it.
+                mediaFrom: Math.max(0, w.start - Math.round(fps * 0.2)),
+                mediaUntil: next
+                  ? next.start + next.travel + Math.round(fps * 0.5)
+                  : w.start + w.frames,
+              }}
+            />
+          );
+        })}
+
+        {/* AI props scatter above the regions (screen-blended cut-outs).
+            They live and die with their scene's visibility. */}
+        {renderOrder.flatMap(({ i, item }) =>
+          (item!.props ?? []).map((prop, p) => (
+            <PropSprite
+              key={`${item!.scene_id}-prop-${p}`}
+              prop={prop}
+              item={item!}
+              appearFrame={camera.windows[i].start + Math.round(camera.windows[i].travel * 0.7)}
+              alpha={alphas[i]}
+              seed={i * 7 + p + 1}
+            />
+          ))
+        )}
+    </>
+  );
+
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden' }}>
+      {/* The flat colour field. Stays in viewport space (doesn't fly with the
+          world). There used to be a second, parallax dot grid layered on top of
+          it; one grid, pinned to the world, sells the depth on its own.
+          The mood field (§11.5) keys off the journey's DOMINANT mood — one
+          screen-space field for the whole flight; per-station switching would
+          pop mid-flight with no cut to hide it. */}
+      <AmbientBackground mood={dominantMood(scenes)} />
+
+      {/* Camera roll: the world rotates a few degrees around the viewport
+          center mid-flight and always lands level — a banked-turn feel.
+          NO will-change anywhere on the camera path: forcing the huge world
+          into a cached compositor layer makes Chromium reuse rasters taken at
+          mid-flight scales, which is exactly the "text goes blurry when the
+          camera lands" bug. Un-promoted, every frame rasters at the true
+          accumulated scale and DOM text stays vector-crisp. */}
+      {/* THE WORLD — one camera transform moves everything, drawn once per
+          shutter sample so a fast flight smears instead of strobing (§2.10).
+          Below the velocity threshold this is a single sharp copy and the
+          frame is byte-identical to the pre-blur renderer. */}
+      {worldSamples.map((s) => (
+        <AbsoluteFill
+          key={`world-${s.step}`}
+          style={{
+            opacity: s.opacity < 1 ? s.opacity : undefined,
+            transform: s.cam.rot !== 0 ? `rotate(${s.cam.rot}deg)` : undefined,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              width: plan.world.width,
+              height: plan.world.height,
+              transform: `translate(${vw / 2 - s.cam.x * s.cam.scale}px, ${vh / 2 - s.cam.y * s.cam.scale}px) scale(${s.cam.scale})`,
+              transformOrigin: '0 0',
+            }}
+          >
+            {/* Ghost copies draw the frame again; they must never speak or
+                whoosh again (motion/ghost.tsx). */}
+            {s.step === 0 ? worldInner : <Ghost>{worldInner}</Ghost>}
+          </div>
+        </AbsoluteFill>
+      ))}
+
+      {/* SOUND DESIGN: every flight whooshes past, flavoured by its story
+          relation (dives rumble, consequences land with a thump, reveals
+          rise). Stretched to ride the flight's own length; the cold open
+          gets a soft glass shimmer instead. */}
+      <SfxCue name="shimmer" at={2} volume={0.8} />
+      {scenes.map((scene, i) => {
+        if (i === 0) return null;
+        const w = camera.windows[i];
+        if (!w || w.travel <= 0) return null;
+        const item = itemByScene.get(scene.scene_id);
+        const sound = flightSound(item);
+        if (!sound) return null;
+        const { name, volume } = sound;
+        const travelSec = w.travel / fps;
+        const rate = Math.max(0.8, Math.min(1.45, sfxDuration(name) / Math.max(0.5, travelSec)));
+        return (
+          <React.Fragment key={`w-${scene.scene_id}`}>
+            <SfxCue name={name} at={w.start} volume={volume} playbackRate={rate} />
+            {/* kinetic_break lands like a cut — a stamp thump on touchdown. */}
+            {(item?.treatment ?? '') === 'kinetic_break' ? (
+              <SfxCue name="stamp" at={w.start + w.travel} volume={0.85} />
+            ) : null}
+          </React.Fragment>
+        );
+      })}
+
+      {/* PUNCHLINES in screen space: outside the camera transform they stay
+          pixel-crisp at any zoom. Each one gets its scene's clock so word-sync
+          anchors to the narration start. */}
+      {scenes.map((scene: Scene, i) => {
+        if (!scene.punchline) return null;
+        const w = camera.windows[i];
+        return (
+          <SceneClockProvider
+            key={`p-${scene.scene_id}`}
+            window={{ start: w.start, end: w.start + w.frames, narrationStart: w.start }}
+          >
+            <PunchLine scene={scene} />
+          </SceneClockProvider>
+        );
+      })}
+
+      {/* KARAOKE CAPTIONS in the same screen-space layer — word timestamps
+          re-base to each scene's narration start exactly like punchlines. */}
+      {captions
+        ? scenes.map((scene: Scene, i) => {
+            if (!scene.narration_words?.length) return null;
+            const w = camera.windows[i];
+            return (
+              <SceneClockProvider
+                key={`cap-${scene.scene_id}`}
+                window={{ start: w.start, end: w.start + w.frames, narrationStart: w.start }}
+              >
+                <CaptionTrack scene={scene} />
+              </SceneClockProvider>
+            );
+          })
+        : null}
+
+      {/* Per-scene narration, timed to each region's window. Boosted above
+          the music bed so the voice always leads the mix. */}
+      {scenes.map((scene, i) =>
+        scene.narration_audio_url ? (
+          <Sequence
+            key={`n-${scene.scene_id}`}
+            from={camera.windows[i].start}
+            durationInFrames={camera.windows[i].frames}
+          >
+            <Audio src={scene.narration_audio_url} volume={1.3} />
+          </Sequence>
+        ) : null
+      )}
+    </AbsoluteFill>
+  );
+};
