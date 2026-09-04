@@ -16,6 +16,9 @@ import { SceneFilmstrip } from './SceneFilmstrip'
 import { SceneInspector } from './SceneInspector'
 import { SettingsSections, type SettingsHandlers } from './SettingsSections'
 import { RevisePanel } from './RevisePanel'
+import { AddSceneDialog } from './AddSceneDialog'
+import { CustomSchemeDialog } from './CustomSchemeDialog'
+import { usePlayerPayload } from './usePlayerPayload'
 import type { Storyboard } from './types'
 
 /**
@@ -41,6 +44,9 @@ export function StoryboardPageClient() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
   const projectProgress = useProjectProgress(id ?? null)
+  // One shot list for the whole editor: the stage plays it and every
+  // filmstrip tile renders a frame of it.
+  const player = usePlayerPayload(id ?? '', board?.current_look)
 
   // Generic in-flight tracker so every settings button gets the same
   // "yes, your click registered" feedback (spinner + disabled) without a
@@ -174,16 +180,13 @@ export function StoryboardPageClient() {
     [openRevise]
   )
 
-  // There is no create-scene endpoint, and inventing one client-side would be
-  // a lie: a new beat has to be written, paced and slotted by the planner. So
-  // "Add scene" is a pre-addressed request to the thing that can actually do
-  // it, seeded with where the user clicked.
-  const addSceneViaAi = useCallback(() => {
-    const order = board?.scenes.find((s) => s.scene_id === activeSceneId)?.order ?? board?.scenes.length ?? 1
-    setReviseTargets([])
-    setReviseText((text) => text || `Add a new scene after scene ${order} that `)
-    openRevise()
-  }, [board?.scenes, activeSceneId, openRevise])
+  // Adding a scene is its own gesture, not a free-text note: the two things
+  // the user knows — where it goes and what it covers — are a dropdown and a
+  // sentence, and the planner does the rest. It runs through the same
+  // revision job, so the storyboard shows "applying" exactly as it does for
+  // an AI edit.
+  const [addSceneOpen, setAddSceneOpen] = useState(false)
+  const [newSchemeOpen, setNewSchemeOpen] = useState(false)
 
   const handleRevise = async () => {
     const note = reviseText.trim()
@@ -261,6 +264,20 @@ export function StoryboardPageClient() {
   const handlers: SettingsHandlers = useMemo(
     () => ({
       onShuffleTheme: () => void post('shuffle-theme', 'shuffle-theme', {}, 'Failed to shuffle theme'),
+      onColorScheme: (name) =>
+        void post(`color-scheme:${name}`, 'color-scheme', { scheme: name }, 'Failed to change the colour scheme'),
+      onNewScheme: () => setNewSchemeOpen(true),
+      onDeleteScheme: (name) => {
+        if (!confirm('Delete this colour scheme from your library? Videos already using it keep their colours.')) return
+        void withPending(`color-scheme:${name}`, async () => {
+          try {
+            await api.delete(`/api/explainer/color-schemes/${name}`)
+            await fetchBoard()
+          } catch {
+            alert('Failed to delete that colour scheme')
+          }
+        })
+      },
       onFontPack: (pack) => void post(`font-pack:${pack}`, 'font-pack', { pack }, 'Failed to switch typography'),
       onSkin: (skin) => void post(`skin:${skin}`, 'skin', { skin }, 'Failed to switch skin'),
       onCompositionMode: handleCompositionMode,
@@ -310,7 +327,7 @@ export function StoryboardPageClient() {
       },
       onBrandColor: (color) => void post('brand-color', 'brand', { color }, 'Failed to update brand color'),
     }),
-    [post, board, handleCompositionMode]
+    [post, board, handleCompositionMode, withPending, fetchBoard]
   )
 
   if (loading) {
@@ -416,6 +433,8 @@ export function StoryboardPageClient() {
         canAfford={canAffordRender}
         hasSubscription={hasSubscription}
         onRender={handleRender}
+        projectId={id}
+        onRenamed={fetchBoard}
       />
 
       {board.status === 'failed' && board.error_message && (
@@ -510,7 +529,11 @@ export function StoryboardPageClient() {
 
             <StageDeck
               board={board}
-              projectId={id}
+              payload={player.payload}
+              payloadLoading={player.loading}
+              payloadError={player.error}
+              timing={player.timing}
+              onReloadPayload={player.reload}
               activeSceneId={activeScene?.scene_id ?? null}
               onSelectScene={setActiveSceneId}
               settingsOpen={settingsOpen}
@@ -520,9 +543,10 @@ export function StoryboardPageClient() {
 
             <SceneFilmstrip
               board={board}
+              payload={player.payload}
               activeSceneId={activeScene?.scene_id ?? null}
               onSelect={setActiveSceneId}
-              onAddScene={addSceneViaAi}
+              onAddScene={() => setAddSceneOpen(true)}
               disabled={revising}
             />
           </section>
@@ -596,7 +620,7 @@ export function StoryboardPageClient() {
       {/* The AI edit surface. A deliberate mode: it owns the screen while you
           write the note, then hands it straight back. */}
       {reviseOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 sm:p-8">
           <div
             className="absolute inset-0"
             onClick={() => setReviseOpen(false)}
@@ -606,7 +630,7 @@ export function StoryboardPageClient() {
             <div className="mb-2 flex justify-end">
               <button
                 onClick={() => setReviseOpen(false)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-card px-2.5 py-1.5 text-xs font-semibold text-muted-foreground shadow-soft hover:text-foreground"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-popover px-2.5 py-1.5 text-xs font-semibold text-muted-foreground shadow-soft hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" /> Close
               </button>
@@ -626,6 +650,26 @@ export function StoryboardPageClient() {
             />
           </div>
         </div>
+      )}
+
+      {newSchemeOpen && (
+        <CustomSchemeDialog
+          onClose={() => setNewSchemeOpen(false)}
+          onCreated={(name) => {
+            if (name) handlers.onColorScheme(name)
+            else void fetchBoard()
+          }}
+        />
+      )}
+
+      {addSceneOpen && (
+        <AddSceneDialog
+          board={board}
+          projectId={id}
+          defaultAfterSceneId={activeScene?.scene_id ?? null}
+          onClose={() => setAddSceneOpen(false)}
+          onQueued={() => { setResultDismissed(false); void fetchBoard() }}
+        />
       )}
 
       <ProcessingStartedDialog

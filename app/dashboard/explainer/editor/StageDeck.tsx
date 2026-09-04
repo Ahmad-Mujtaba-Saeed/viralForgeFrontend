@@ -1,13 +1,14 @@
 'use client'
 
 import * as React from 'react'
+import dynamic from 'next/dynamic'
 import type { PlayerRef } from '@remotion/player'
 import {
   AlertTriangle, Captions, Crop, Download, FileText, Gauge, Layers, Loader2, Maximize,
   Music, Pause, Play, RefreshCw, RotateCcw, SkipBack, SkipForward, Volume2, VolumeX, X,
 } from 'lucide-react'
-import { PreviewPlayer, type PreviewTiming } from './PreviewPlayer'
-import type { StageMeta } from './PlayerStage'
+import type { PlayerPayload, StageMeta } from './PlayerStage'
+import type { PlayerTiming } from './usePlayerPayload'
 import { COMPOSITION_LABELS, type Storyboard } from './types'
 
 /**
@@ -24,6 +25,23 @@ import { COMPOSITION_LABELS, type Storyboard } from './types'
  * is still arriving.
  */
 
+/**
+ * The composition is ~1.4MB with the whole layout library behind it, so it
+ * stays out of the dashboard's main bundle. The deck's own chrome is NOT in
+ * here: it paints immediately and stays legible while this arrives.
+ */
+const PlayerStage = dynamic(() => import('./PlayerStage'), {
+  ssr: false,
+  loading: () => (
+    <div className="grid h-full w-full place-items-center text-xs text-white/60">
+      <span className="inline-flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading the player…
+      </span>
+    </div>
+  ),
+})
+
 const stamp = (seconds: number): string => {
   const safe = Math.max(0, Number.isFinite(seconds) ? seconds : 0)
   const m = Math.floor(safe / 60)
@@ -35,7 +53,11 @@ type Source = 'preview' | 'final'
 
 export function StageDeck({
   board,
-  projectId,
+  payload,
+  payloadLoading,
+  payloadError,
+  timing,
+  onReloadPayload,
   activeSceneId,
   onSelectScene,
   settingsOpen,
@@ -43,7 +65,12 @@ export function StageDeck({
   settingsPanel,
 }: {
   board: Storyboard
-  projectId: string
+  /** The shot list, fetched once by the page and shared with the filmstrip. */
+  payload: PlayerPayload | null
+  payloadLoading: boolean
+  payloadError: string | null
+  timing: PlayerTiming | null
+  onReloadPayload: () => void
   activeSceneId: string | null
   onSelectScene: (sceneId: string) => void
   settingsOpen: boolean
@@ -58,9 +85,6 @@ export function StageDeck({
   const [frame, setFrame] = React.useState(0)
   const [playing, setPlaying] = React.useState(false)
   const [muted, setMuted] = React.useState(false)
-  const [timing, setTiming] = React.useState<PreviewTiming | null>(null)
-  const [loadError, setLoadError] = React.useState<string | null>(null)
-  const [reloadToken, setReloadToken] = React.useState(0)
 
   const videos = (board.output_videos ?? []).filter((v) => v.url)
   const hasVideo = board.status === 'completed' && Boolean(board.output_url)
@@ -85,13 +109,6 @@ export function StageDeck({
   const starts = meta?.starts ?? []
 
   const handleMeta = React.useCallback((next: StageMeta) => setMeta(next), [])
-  const handleStatus = React.useCallback(
-    (s: { loading: boolean; error: string | null; timing: PreviewTiming | null }) => {
-      setLoadError(s.error)
-      setTiming(s.timing)
-    },
-    []
-  )
 
   // Which scene the playhead is inside: the last one that has started. This is
   // what keeps the inspector pointed at the beat you are watching.
@@ -178,7 +195,7 @@ export function StageDeck({
       className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[#14120F] shadow-soft-lg"
     >
       {settingsOpen && (
-        <div className="absolute left-4 top-4 z-20 w-[300px] rounded-2xl border border-border bg-card p-3.5 shadow-soft-lg">
+        <div className="absolute left-4 top-4 z-20 w-[300px] rounded-2xl border border-border bg-popover p-3.5 text-popover-foreground shadow-soft-lg">
           <div className="mb-2.5 flex items-center justify-between">
             <span className="text-[13px] font-bold text-foreground">Playback &amp; render</span>
             <button
@@ -208,17 +225,29 @@ export function StageDeck({
         >
           {source === 'final' && finalUrl ? (
             <video key={finalUrl} src={finalUrl} controls className="h-full w-full object-contain" />
+          ) : payloadError ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-xs text-white/70">
+              <AlertTriangle className="h-5 w-5 text-warn" />
+              <span>{payloadError}</span>
+              <button onClick={onReloadPayload} className="font-semibold text-primary hover:underline">
+                Try again
+              </button>
+            </div>
+          ) : !payload ? (
+            <div className="grid h-full w-full place-items-center text-xs text-white/60">
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Preparing the preview…
+              </span>
+            </div>
           ) : (
-            <PreviewPlayer
-              projectId={projectId}
-              look={board.current_look}
+            <PlayerStage
+              payload={payload}
               playerRef={playerRef}
               onMeta={handleMeta}
               onFrame={setFrame}
               onPlayingChange={setPlaying}
               onMutedChange={setMuted}
-              onStatus={handleStatus}
-              reloadToken={reloadToken}
             />
           )}
         </div>
@@ -338,7 +367,7 @@ export function StageDeck({
             )}
             {source === 'preview' && (
               <button
-                onClick={() => setReloadToken((n) => n + 1)}
+                onClick={onReloadPayload}
                 className="grid h-7 w-7 place-items-center rounded-lg bg-white/10 text-white transition-colors hover:bg-white/20"
                 title="Reload the storyboard into the player"
               >
@@ -382,11 +411,11 @@ export function StageDeck({
                 </a>
               )}
             </>
-          ) : loadError ? (
+          ) : payloadError ? (
             <span className="inline-flex items-center gap-1 text-warn">
-              <AlertTriangle className="h-3 w-3" /> {loadError}
+              <AlertTriangle className="h-3 w-3" /> {payloadError}
             </span>
-          ) : !meta ? (
+          ) : !meta || payloadLoading ? (
             <span className="inline-flex items-center gap-1.5">
               <Loader2 className="h-3 w-3 animate-spin" /> Preparing the composition…
             </span>

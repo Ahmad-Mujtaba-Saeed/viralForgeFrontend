@@ -1,8 +1,16 @@
 'use client'
 
 import * as React from 'react'
+import dynamic from 'next/dynamic'
 import { ImageOff, Plus, Sparkles, Wand2 } from 'lucide-react'
+import type { PlayerPayload } from './PlayerStage'
 import type { Scene, Storyboard } from './types'
+
+/**
+ * Real frames, from the same composition the stage plays. Shares that
+ * chunk, so by the time the strip is on screen it is already loaded.
+ */
+const SceneThumb = dynamic(() => import('./SceneThumb'), { ssr: false })
 
 /**
  * SceneFilmstrip — the whole video at a glance, one tile per beat.
@@ -28,7 +36,11 @@ export function headingOf(scene: Scene): string {
   return scene.narration?.trim().slice(0, 70) || `Scene ${scene.order}`
 }
 
-/** A plate in this video's palette, nudged along the strip so beats differ. */
+/**
+ * The plate under a tile: this video's own paper. It is what a tile shows
+ * before its real frame has rendered, and what it keeps if the composition
+ * cannot be loaded at all — so the strip is never a row of grey boxes.
+ */
 export function plateFor(board: Storyboard, index: number): string {
   const from = board.theme?.bg_from ?? '#1B2340'
   const to = board.theme?.bg_to ?? '#0E1222'
@@ -37,12 +49,15 @@ export function plateFor(board: Storyboard, index: number): string {
 
 export function SceneFilmstrip({
   board,
+  payload,
   activeSceneId,
   onSelect,
   onAddScene,
   disabled = false,
 }: {
   board: Storyboard
+  /** The shot list, shared with the stage — tiles render frames from it. */
+  payload: PlayerPayload | null
   activeSceneId: string | null
   onSelect: (sceneId: string) => void
   /** There is no create-scene endpoint — this asks the AI for one instead. */
@@ -97,13 +112,23 @@ export function SceneFilmstrip({
                 className="relative flex aspect-video flex-col justify-end overflow-hidden rounded-[9px] p-2.5"
                 style={{ background: plateFor(board, index) }}
               >
-                <span className="line-clamp-2 text-[10px] font-bold leading-tight text-white/95">
+                {payload ? (
+                  <SceneThumb
+                    payload={payload}
+                    sceneIndex={index}
+                    className="pointer-events-none absolute inset-0 overflow-hidden"
+                  />
+                ) : null}
+                {/* The heading rides ON the frame, on a scrim, because a
+                    156px still of a real scene is often unreadable and the
+                    tile still has to say which beat it is. */}
+                <span className="relative line-clamp-2 rounded-[4px] bg-black/55 px-1 py-0.5 text-[10px] font-bold leading-tight text-white/95">
                   {headingOf(scene)}
                 </span>
-                <span className="absolute left-1.5 top-1.5 grid h-[17px] min-w-[17px] place-items-center rounded-[5px] bg-black/55 px-1 font-mono text-[9px] font-bold text-white">
+                <span className="absolute left-1.5 top-1.5 z-10 grid h-[17px] min-w-[17px] place-items-center rounded-[5px] bg-black/55 px-1 font-mono text-[9px] font-bold text-white">
                   {scene.order}
                 </span>
-                <span className="absolute right-1.5 top-1.5 flex items-center gap-1">
+                <span className="absolute right-1.5 top-1.5 z-10 flex items-center gap-1">
                   {addedIds.has(scene.scene_id) && (
                     <span className="grid h-[17px] w-[17px] place-items-center rounded-[5px] bg-good text-white" title="Added by the last AI revision">
                       <Plus className="h-2.5 w-2.5" />

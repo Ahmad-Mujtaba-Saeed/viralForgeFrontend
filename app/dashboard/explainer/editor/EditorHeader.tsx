@@ -1,7 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import { Captions, Download, FileText, Film, Loader2, Play, Wand2, Zap } from 'lucide-react'
+import api from '@/lib/axios'
+import { Captions, Check, Download, FileText, Film, Loader2, Pencil, Play, Wand2, X, Zap } from 'lucide-react'
 import type { Storyboard } from './types'
 
 /** m:ss over the whole storyboard. */
@@ -27,6 +28,8 @@ export function EditorHeader({
   canAfford,
   hasSubscription,
   onRender,
+  projectId,
+  onRenamed,
 }: {
   board: Storyboard
   credits: number
@@ -36,9 +39,50 @@ export function EditorHeader({
   canAfford: boolean
   hasSubscription: boolean
   onRender: () => void
+  projectId: string
+  onRenamed: () => void
 }) {
   const [kitOpen, setKitOpen] = React.useState(false)
   const kitRef = React.useRef<HTMLDivElement | null>(null)
+
+  // Rename. The title is the storyboard heading, the copy the thumbnail is
+  // built from and what the YouTube packaging writes around, so it is worth
+  // being able to change once the video has taken shape — it was fixed at
+  // creation with no way back.
+  const [renaming, setRenaming] = React.useState(false)
+  const [draft, setDraft] = React.useState(board.title)
+  const [saving, setSaving] = React.useState(false)
+  const [renameError, setRenameError] = React.useState<string | null>(null)
+  const titleRef = React.useRef<HTMLInputElement | null>(null)
+
+  const openRename = () => {
+    setDraft(board.title)
+    setRenameError(null)
+    setRenaming(true)
+    setTimeout(() => {
+      titleRef.current?.focus()
+      titleRef.current?.select()
+    }, 30)
+  }
+
+  const saveTitle = async () => {
+    const next = draft.trim().replace(/\s+/g, ' ')
+    if (next === board.title || next.length < 2) {
+      setRenaming(false)
+      return
+    }
+    setSaving(true)
+    setRenameError(null)
+    try {
+      await api.post(`/api/explainer/projects/${projectId}/title`, { title: next })
+      onRenamed()
+      setRenaming(false)
+    } catch (err: any) {
+      setRenameError(err?.response?.data?.message || 'Could not rename this video.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   React.useEffect(() => {
     if (!kitOpen) return
@@ -61,9 +105,50 @@ export function EditorHeader({
           AI EXPLAINER
         </span>
         <div className="min-w-0">
-          <h1 className="truncate font-display text-[17px] font-semibold tracking-tight text-foreground">
-            {board.title}
-          </h1>
+          {renaming ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                ref={titleRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveTitle()
+                  if (e.key === 'Escape') setRenaming(false)
+                }}
+                maxLength={120}
+                disabled={saving}
+                aria-label="Video title"
+                className="w-[min(60vw,420px)] rounded-lg border border-primary bg-inset px-2 py-1 font-display text-[17px] font-semibold tracking-tight text-foreground outline-none disabled:opacity-60"
+              />
+              <button
+                onClick={() => void saveTitle()}
+                disabled={saving || draft.trim().length < 2}
+                title="Save"
+                className="grid h-7 w-7 place-items-center rounded-lg bg-primary text-primary-foreground disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={() => setRenaming(false)}
+                title="Cancel"
+                className="grid h-7 w-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-inset"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={openRename}
+              title="Rename this video"
+              className="group flex min-w-0 items-center gap-1.5 text-left"
+            >
+              <h1 className="truncate font-display text-[17px] font-semibold tracking-tight text-foreground">
+                {board.title}
+              </h1>
+              <Pencil className="h-3 w-3 shrink-0 text-ink3 opacity-0 transition-opacity group-hover:opacity-100" />
+            </button>
+          )}
+          {renameError && <p className="text-[11px] text-warn">{renameError}</p>}
           <div className="font-mono text-[12px] text-ink3">
             {board.scenes.length} scene{board.scenes.length === 1 ? '' : 's'} · {stamp(totalSeconds)} ·{' '}
             {board.aspect_ratio} · <span className="capitalize">{board.status}</span>
@@ -91,7 +176,7 @@ export function EditorHeader({
             Export kit
           </button>
           {kitOpen && hasKit && (
-            <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-60 rounded-xl border border-border bg-card p-2 shadow-soft-lg">
+            <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-60 rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-soft-lg">
               {(videos.length ? videos : [{ aspect: board.aspect_ratio, label: 'Video', url: board.output_url }]).map(
                 (v) =>
                   v.url ? (

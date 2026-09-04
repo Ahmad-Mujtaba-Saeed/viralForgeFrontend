@@ -21,7 +21,16 @@ import { usePrefersReducedMotion } from './StylePicker'
  * bar. Nothing loads until the popover opens, and each clip is only fetched
  * once a pointer rests on its tile — the poster PNG carries the tile until
  * then, so the grid paints complete and cheap.
+ *
+ * PAGED, not scrolled. Eighteen tiles in a 420px popover came out ~125px wide
+ * behind a scrollbar, which is smaller than the thing being judged: a wipe or
+ * a column reveal at that size is a grey shimmer. Nine per page at nearly
+ * double the width shows the cut, and two page buttons cost less attention
+ * than a scroll region that hides half the options below the fold.
  */
+
+/** Nine tiles — a 3x3 page at a size where the cut is actually visible. */
+const PER_PAGE = 9
 
 /**
  * Fallback one-liners for the transitions the registry does not describe.
@@ -108,7 +117,7 @@ function Tile({
         )}
       </div>
       <p
-        className={`mt-1 truncate text-[11px] font-semibold capitalize ${
+        className={`mt-1.5 truncate text-xs font-semibold capitalize ${
           active ? 'text-primary' : 'text-foreground'
         }`}
       >
@@ -142,6 +151,16 @@ export function TransitionPicker({
   const described = hovered ?? value
   const hint = meanings[described] ?? FALLBACK_HINTS[described] ?? ''
 
+  const pageCount = Math.max(1, Math.ceil(options.length / PER_PAGE))
+  // Open on the page holding the current choice, not on page 1 — otherwise
+  // picking `stack_push` twice means paging across to find it twice.
+  const pageOfValue = Math.max(0, Math.floor(options.indexOf(value) / PER_PAGE))
+  const [page, setPage] = React.useState(pageOfValue)
+  React.useEffect(() => {
+    if (open) setPage(pageOfValue)
+  }, [open, pageOfValue])
+  const shown = options.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE)
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -159,7 +178,7 @@ export function TransitionPicker({
           {labelFor(value)}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" side="bottom" className="w-[420px] p-3">
+      <PopoverContent align="end" side="bottom" className="w-[min(92vw,640px)] p-3">
         <p className="text-sm font-semibold text-foreground">Transition in</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           How this scene arrives from the one before it.
@@ -168,9 +187,9 @@ export function TransitionPicker({
           role="radiogroup"
           aria-label="Scene transition"
           onMouseLeave={() => setHovered(null)}
-          className="mt-2.5 grid max-h-[46vh] grid-cols-3 gap-1.5 overflow-y-auto pr-1"
+          className="mt-2.5 grid grid-cols-3 gap-2"
         >
-          {options.map((option) => (
+          {shown.map((option) => (
             <div key={option} onMouseEnter={() => setHovered(option)}>
               <Tile
                 option={option}
@@ -184,6 +203,26 @@ export function TransitionPicker({
             </div>
           ))}
         </div>
+        {pageCount > 1 && (
+          <div className="mt-2.5 flex items-center justify-center gap-1.5">
+            {Array.from({ length: pageCount }).map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setPage(i)}
+                aria-label={`Page ${i + 1} of transitions`}
+                aria-current={page === i}
+                className={`h-7 min-w-7 rounded-lg border px-2 text-xs font-bold transition-colors ${
+                  page === i
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-card text-muted-foreground hover:bg-inset'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        )}
         <p className="mt-2.5 min-h-8 border-t border-border pt-2 text-[11px] leading-relaxed text-muted-foreground">
           <span className="font-semibold capitalize text-foreground">{labelFor(described)}</span>
           {hint ? ` — ${hint}` : ''}

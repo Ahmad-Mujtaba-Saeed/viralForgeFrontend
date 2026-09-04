@@ -50,7 +50,7 @@ export function RevisePanel({
     ) : null
 
   return (
-    <div className="mb-6 rounded-2xl border border-border bg-card shadow-soft">
+    <div className="mb-6 rounded-2xl border border-border bg-popover text-popover-foreground shadow-soft-lg">
       <button
         onClick={() => onOpen(!open)}
         className="flex w-full items-center justify-between gap-3 p-4 text-left"

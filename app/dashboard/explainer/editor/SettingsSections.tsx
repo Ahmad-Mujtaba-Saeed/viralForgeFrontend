@@ -2,14 +2,14 @@
 
 import * as React from 'react'
 import {
-  BadgeCheck, BookMarked, ChevronDown, ChevronUp, Columns2, Gauge, Grid3x3, Layers, Loader2, Lock,
-  Palette, ShieldCheck, Shuffle, Sparkles, Type, Volume2, VolumeX, Wand2, Wind, Music, Music2,
-  Captions, CaptionsOff,
+  BadgeCheck, BookMarked, ChevronDown, ChevronUp, Columns2, Grid3x3, Loader2, Lock,
+  Palette, ShieldCheck, Shuffle, Volume2, VolumeX, Wand2, Wind, Music, Music2,
+  Captions, CaptionsOff, Plus, Sparkles,
 } from 'lucide-react'
 import { BrandControls } from './BrandControls'
 import { LintReport } from './LintReport'
 import { MusicPanel } from './MusicPanel'
-import { StylePicker } from './StylePicker'
+import { StyleSelect, type SelectOption } from './StyleSelect'
 import { COMPOSITION_LABELS, type Storyboard } from './types'
 
 /**
@@ -23,6 +23,9 @@ import { COMPOSITION_LABELS, type Storyboard } from './types'
 
 export type SettingsHandlers = {
   onShuffleTheme: () => void
+  onColorScheme: (name: string) => void
+  onDeleteScheme: (name: string) => void
+  onNewScheme: () => void
   onFontPack: (pack: string) => void
   onSkin: (skin: string) => void
   onCompositionMode: (mode: string) => void
@@ -174,6 +177,26 @@ export function SettingsSections({
   const autoVisualsOn = Boolean(board.auto_visuals)
   const smoothFps = board.render_fps ?? 30
 
+  // The palette list the picker shows. Built-ins have a recorded loop keyed by
+  // name; a scheme the user mixed has none, so it carries its own colours for
+  // the preview pane and the delete the row offers.
+  const schemeOptions: SelectOption[] = React.useMemo(
+    () =>
+      (board.color_schemes ?? []).map((scheme) => {
+        const custom = Boolean((scheme as { custom?: boolean }).custom)
+        return {
+          key: scheme.name,
+          label: scheme.label,
+          hint: custom ? 'A scheme you mixed — only you can see it.' : undefined,
+          swatch: custom
+            ? [scheme.bg_from, scheme.accent, scheme.accent2, scheme.text]
+            : undefined,
+          onDelete: custom ? () => handlers.onDeleteScheme(scheme.name) : undefined,
+        }
+      }),
+    [board.color_schemes, handlers]
+  )
+
   const motionSummary =
     board.motion_style && board.motion_style !== 'auto'
       ? board.motion_styles?.[board.motion_style]?.label ?? board.motion_style
@@ -193,7 +216,24 @@ export function SettingsSections({
       >
         {board.theme && (
           <>
-            <Row label="Colour scheme">
+            <StyleSelect
+              group="scheme"
+              label="Colour scheme"
+              value={board.color_scheme ?? board.theme.name}
+              pendingKey={pendingKeyIn('color-scheme')}
+              disabled={groupPending('color-scheme') || themeLocked}
+              onSelect={handlers.onColorScheme}
+              options={schemeOptions}
+              footer={
+                <button
+                  onClick={handlers.onNewScheme}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-semibold text-primary transition-colors hover:bg-inset"
+                >
+                  <Plus className="h-3.5 w-3.5" /> New colour scheme
+                </button>
+              }
+            />
+            <Row label="Palette">
               <span className="inline-flex items-center gap-2">
                 <span className="flex gap-1">
                   {[board.theme.bg_to, board.theme.accent, board.theme.accent2, board.theme.text].map((c, i) => (
@@ -203,18 +243,15 @@ export function SettingsSections({
                 <button
                   onClick={handlers.onShuffleTheme}
                   disabled={isPending('shuffle-theme') || themeLocked}
-                  title={themeLocked ? `${capitalisedOwner} paints with its own fixed palette — ${themeLockEscape.toLowerCase()}` : 'Try another palette'}
+                  title={themeLocked ? capitalisedOwner + ' paints with its own fixed palette.' : 'Try another palette'}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Shuffle className={`h-3 w-3 ${isPending('shuffle-theme') ? 'animate-spin' : ''}`} /> Shuffle
+                  <Shuffle className={isPending('shuffle-theme') ? 'h-3 w-3 animate-spin' : 'h-3 w-3'} /> Shuffle
                 </button>
               </span>
             </Row>
             {themeLocked && (
-              <p
-                className="flex items-start gap-1.5 rounded-lg bg-warn-soft px-2.5 py-1.5 text-[11px] text-warn"
-                title={`${capitalisedOwner} uses its own fixed palette, so the video's colour scheme has no effect. ${themeLockEscape}`}
-              >
+              <p className="flex items-start gap-1.5 rounded-lg bg-warn-soft px-2.5 py-1.5 text-[11px] text-warn">
                 <Lock className="mt-0.5 h-3 w-3 shrink-0" />
                 <span>The colour scheme is overridden by {themeLockOwner}. {themeLockEscape}</span>
               </p>
@@ -223,10 +260,9 @@ export function SettingsSections({
         )}
 
         {board.font_packs && Object.keys(board.font_packs).length > 0 && (
-          <StylePicker
+          <StyleSelect
             group="font"
-            title="Typeface"
-            icon={<Type className="h-4 w-4 text-muted-foreground" />}
+            label="Typeface"
             value={board.font_pack ?? 'auto'}
             pendingKey={pendingKeyIn('font-pack')}
             disabled={groupPending('font-pack')}
@@ -243,10 +279,9 @@ export function SettingsSections({
         )}
 
         {board.skins && (
-          <StylePicker
+          <StyleSelect
             group="skin"
-            title="Skin"
-            icon={<Layers className="h-4 w-4 text-muted-foreground" />}
+            label="Skin"
             value={board.skin ?? 'auto'}
             pendingKey={pendingKeyIn('skin')}
             disabled={groupPending('skin')}
@@ -271,9 +306,9 @@ export function SettingsSections({
           (board.composition_mode === 'math_board' ? (
             board.board_styles && Object.keys(board.board_styles).length > 0 ? (
               <>
-                <StylePicker
+                <StyleSelect
                   group="board"
-                  title="Board"
+                  label="Board"
                   value={board.board_style ?? 'auto'}
                   pendingKey={pendingKeyIn('board-style')}
                   disabled={groupPending('board-style')}
@@ -301,9 +336,9 @@ export function SettingsSections({
             ) : null
           ) : (
             <>
-              <StylePicker
+              <StyleSelect
                 group="composition"
-                title="Composition"
+                label="Composition"
                 value={board.composition_mode ?? ''}
                 pendingKey={switchingMode}
                 disabled={switchingMode !== null}
@@ -321,8 +356,8 @@ export function SettingsSections({
               />
               {board.composition_mode === 'hybrid' && board.chapter_plan?.chapters?.length ? (
                 <p className="text-[11px] text-muted-foreground">
-                  {board.chapter_plan.chapters.length} chapters ·{' '}
-                  {board.chapter_plan.chapters.map((c) => c.mode).join(' → ')}
+                  {board.chapter_plan.chapters.length} chapters{' '}
+                  {board.chapter_plan.chapters.map((c) => c.mode).join(' - ')}
                 </p>
               ) : null}
             </>
@@ -371,10 +406,9 @@ export function SettingsSections({
         onToggle={toggleSection}
       >
         {board.motion_styles && (
-          <StylePicker
+          <StyleSelect
             group="motion"
-            title="Style"
-            icon={<Wand2 className="h-4 w-4 text-muted-foreground" />}
+            label="Style"
             value={board.motion_style ?? 'auto'}
             pendingKey={pendingKeyIn('motion-style')}
             disabled={groupPending('motion-style')}
@@ -397,17 +431,16 @@ export function SettingsSections({
           />
         )}
         {(board.render_fps_options?.length ?? 0) > 1 && (
-          <StylePicker
+          <StyleSelect
             group="fps"
-            title="Frame rate"
-            icon={<Gauge className="h-4 w-4 text-muted-foreground" />}
+            label="Frame rate"
             value={String(smoothFps)}
             pendingKey={pendingKeyIn('render-fps')}
             disabled={groupPending('render-fps')}
             onSelect={(key) => handlers.onRenderFps(Number(key))}
             options={(board.render_fps_options ?? []).map((fps) => ({
               key: String(fps),
-              label: `${fps} fps`,
+              label: fps + ' fps',
               hint:
                 fps >= 60
                   ? 'Every camera move travels half as far between frames — the smoothest result. Renders take about twice as long.'

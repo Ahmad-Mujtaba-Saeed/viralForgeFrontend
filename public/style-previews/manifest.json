@@ -45,5 +45,21 @@
     "stack_push",
     "line_sweep",
     "match_dissolve"
+  ],
+  "scheme": [
+    "carbon",
+    "ink",
+    "paper",
+    "slate",
+    "bone",
+    "midnight",
+    "plum",
+    "sand",
+    "royal",
+    "blossom",
+    "terminal",
+    "glacier",
+    "ember",
+    "orchid"
   ]
 }
