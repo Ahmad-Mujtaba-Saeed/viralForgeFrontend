@@ -1,10 +1,28 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/axios'
-import { Sparkles, Loader2, Wand2, Play, Square } from 'lucide-react'
+import {
+  ChevronDown, ChevronUp, Clock, Crop, Film, Loader2, Play, Sparkles, Square, Volume2, Wand2, Zap,
+} from 'lucide-react'
 import { MusicPicker } from '@/components/create/music-picker'
+import { useBilling } from '@/hooks/useBilling'
+
+/**
+ * The explainer brief — restyled to the editor's furniture.
+ *
+ * This page and the storyboard editor are one continuous task, and they used
+ * to look like two different products: a centred form here, a three-pane app
+ * next door. Everything below is the editor's own vocabulary — the same
+ * header, the same 380px inspector, the same accordion sections and the same
+ * footer CTA — so crossing from the brief into the storyboard changes what is
+ * on screen and not where anything lives.
+ *
+ * Every control the form had is still here, wired to the same endpoints: the
+ * title, the guide, the script with its tone and AI writer, the aspect, the
+ * length, the narrator voice with its audition, and the music picker.
+ */
 
 const ASPECT_RATIOS = [
   { value: '16:9', label: 'Landscape 16:9' },
@@ -13,15 +31,70 @@ const ASPECT_RATIOS = [
 ]
 
 const TONES = [
-  { value: '', label: 'Tone: Auto' },
+  { value: '', label: 'Auto' },
   { value: 'informative', label: 'Informative' },
   { value: 'energetic', label: 'Energetic' },
   { value: 'dramatic', label: 'Dramatic' },
   { value: 'friendly', label: 'Friendly' },
 ]
 
+/** The inspector's collapsible section — the editor's `Section`, verbatim. */
+function Section({
+  id, icon, title, summary, open, onToggle, children,
+}: {
+  id: string
+  icon: React.ReactNode
+  title: string
+  summary: string
+  open: boolean
+  onToggle: (id: string) => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="border-b border-border">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className={`flex w-full items-center justify-between gap-2.5 px-4 py-3 text-left transition-colors hover:bg-inset ${
+          open ? 'bg-inset/60' : 'bg-transparent'
+        }`}
+      >
+        <span className="flex items-center gap-2.5 text-[13px] font-bold text-foreground">
+          <span className="text-primary [&>svg]:h-[15px] [&>svg]:w-[15px]">{icon}</span>
+          {title}
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="max-w-[150px] truncate font-mono text-[11px] text-ink3">{summary}</span>
+          {open ? <ChevronUp className="h-3.5 w-3.5 text-ink3" /> : <ChevronDown className="h-3.5 w-3.5 text-ink3" />}
+        </span>
+      </button>
+      {open && <div className="flex flex-col gap-3 px-4 pb-4 pt-0.5">{children}</div>}
+    </div>
+  )
+}
+
+/** `label · · · control` — the shape every settings row in the design takes. */
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+      <span className="text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  )
+}
+
+/** A native select wearing the design's value chip. */
+const chipSelect =
+  'max-w-[190px] truncate rounded-lg border border-border bg-inset px-2.5 py-1 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-card focus:border-primary'
+
+const fieldCls =
+  'w-full resize-y rounded-xl border border-border bg-inset px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none transition-colors placeholder:text-ink3 focus:border-primary'
+
+const sectionLabel = 'text-[11px] font-bold uppercase tracking-[0.07em] text-ink3'
+
 export default function ExplainerCreatePage() {
   const router = useRouter()
+  const { credits, hasSubscription, costFor, fetchBilling } = useBilling()
   const [title, setTitle] = useState('')
   // The user's brief for the script writer — how this video should go, not
   // what it is about. Sent both to the generator and to the project, because
@@ -34,6 +107,8 @@ export default function ExplainerCreatePage() {
   const [submitting, setSubmitting] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState<Record<string, boolean>>({ format: true, sound: true })
+  const toggleSection = (id: string) => setOpen((s) => ({ ...s, [id]: !s[id] }))
 
   // Narrator voice — options follow the admin-selected TTS engine.
   const [voices, setVoices] = useState<Record<string, string>>({})
@@ -50,6 +125,12 @@ export default function ExplainerCreatePage() {
   const [musicCategory, setMusicCategory] = useState('auto')
   const [musicTrackId, setMusicTrackId] = useState('')
   const [musicVolume, setMusicVolume] = useState(0.09)
+
+  // The header's credits pill reads the billing store, which nothing on this
+  // route populates on its own.
+  useEffect(() => {
+    fetchBilling().catch(() => {})
+  }, [fetchBilling])
 
   useEffect(() => {
     api
@@ -160,177 +241,290 @@ export default function ExplainerCreatePage() {
     }
   }
 
-  const inputCls =
-    'w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none transition-colors focus:border-primary'
+  const words = useMemo(() => script.trim().split(/\s+/).filter(Boolean).length, [script])
+  // ~2.5 words a second is the pace the storyboard's own duration estimate
+  // uses, so the two agree about how long a script runs.
+  const spoken = Math.round(words / 2.5)
+  const cost = costFor('ai_explainer_video')
+  const ready = title.trim().length >= 2 && script.trim().length >= 10
+  const aspectLabel = ASPECT_RATIOS.find((r) => r.value === aspectRatio)?.label ?? aspectRatio
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-8 flex items-center gap-3.5">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-soft">
-          <Sparkles className="h-6 w-6" />
-        </div>
-        <div>
-          <h1 className="font-display text-[26px] font-semibold tracking-tight text-foreground">AI Explainer Video</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Write a script. AI breaks it into scenes and picks layouts; you upload visuals; it renders an edited video.
-          </p>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <div>
-          <label className="mb-2 block text-[13px] font-semibold text-foreground">Title or problem to explain</label>
-          <textarea
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            rows={2}
-            maxLength={1000}
-            placeholder={'GTA V vs GTA VI — Map Comparison · or paste a problem: "Solve x² + 5x − 24 = 0 by factoring"'}
-            className={`${inputCls} resize-y leading-relaxed`}
-          />
-          <p className="mt-1.5 text-xs text-ink3">
-            A topic makes a normal explainer. A math/physics question (optionally with your solving hints) makes a
-            worked-solution video with native equation, geometry and graph scenes.
-          </p>
-        </div>
-
-        <div>
-          <label className="mb-2 block text-[13px] font-semibold text-foreground">
-            Guide for the AI <span className="font-normal text-ink3">— optional</span>
-          </label>
-          <textarea
-            value={guide}
-            onChange={(e) => setGuide(e.target.value)}
-            rows={4}
-            maxLength={2000}
-            placeholder={
-              'Tell the AI how this video should go. e.g. "Start by showing the chapter name — Quadratic Equations. Then read the question out. Solve it by factoring, not the formula. Finish by checking the answer back in the equation."'
-            }
-            className={`${inputCls} resize-y leading-relaxed`}
-          />
-          <p className="mt-1.5 text-xs text-ink3">
-            Your directions for the script — what to open with, what order to teach in, which method to use. The AI
-            writes the script from your title <em>and</em> this guide. Leave it blank and it decides on its own.
-          </p>
-        </div>
-
-        <div>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <label className="block text-[13px] font-semibold text-foreground">Script</label>
-            <div className="flex items-center gap-2">
-              <select
-                value={tone}
-                onChange={(e) => setTone(e.target.value)}
-                className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-              >
-                {TONES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={handleGenerateScript}
-                disabled={title.trim().length < 3 || generating}
-                title={title.trim().length < 3 ? 'Add a title first' : 'Write the script with AI'}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-accent-line bg-accent-soft px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-accent-soft/70 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-                {generating ? 'Writing…' : 'Generate with AI'}
-              </button>
+    <form onSubmit={handleSubmit} className="mx-auto flex max-w-[1800px] flex-col gap-3.5">
+      {/* The editor's header, one step earlier. */}
+      <header className="flex flex-none flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-border pb-3.5">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <span className="inline-flex items-center gap-2 rounded-lg border border-accent-line bg-accent-soft px-2.5 py-1.5 text-[12px] font-bold tracking-[0.02em] text-primary">
+            <Wand2 className="h-3.5 w-3.5" />
+            AI EXPLAINER
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-[17px] font-semibold tracking-tight text-foreground">
+              {title.trim() || 'New explainer video'}
+            </h1>
+            <div className="font-mono text-[12px] text-ink3">
+              {words > 0 ? `${words} words · ~${spoken}s` : `target ~${targetSeconds}s`} · {aspectRatio} · draft
             </div>
           </div>
-          <textarea
-            value={script}
-            onChange={(e) => setScript(e.target.value)}
-            rows={10}
-            placeholder="Paste or write your script here — or fill in the title and guide above and click Generate with AI."
-            className={`${inputCls} resize-y leading-relaxed`}
-          />
-          <p className="mt-1.5 text-xs text-ink3">
-            The AI will split this into scenes and decide where images vs. bullet points go. Generated scripts are fully
-            editable before you continue.
-          </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-[13px] font-semibold text-foreground">Aspect ratio</label>
-            <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className={inputCls}>
-              {ASPECT_RATIOS.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-2 block text-[13px] font-semibold text-foreground">
-              Target length: <span className="text-primary">{targetSeconds}s</span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span
+            title={hasSubscription ? `${credits} credits · a render costs about ${cost}` : 'Subscribe to render'}
+            className="inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[13px] font-semibold text-muted-foreground"
+          >
+            <Zap className="h-3.5 w-3.5 text-primary" />
+            {credits.toLocaleString()}
+          </span>
+          <button
+            type="submit"
+            disabled={submitting || !ready}
+            title={ready ? undefined : 'Add a title and a script first'}
+            className="inline-flex h-[34px] items-center gap-1.5 rounded-lg bg-foreground px-4 text-[13px] font-bold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Film className="h-3.5 w-3.5" />}
+            {submitting ? 'Analyzing…' : 'Generate storyboard'}
+          </button>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        {/* The brief. */}
+        <section className="flex min-w-0 flex-col gap-3">
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
+            <label htmlFor="explainer-title" className={`${sectionLabel} mb-1.5 block`}>
+              Title or problem to explain
             </label>
-            <input
-              type="range"
-              min={20}
-              max={180}
-              step={10}
-              value={targetSeconds}
-              onChange={(e) => setTargetSeconds(Number(e.target.value))}
-              className="mt-3 w-full accent-[var(--primary)]"
+            <textarea
+              id="explainer-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              rows={2}
+              maxLength={1000}
+              placeholder={'GTA V vs GTA VI — Map Comparison · or paste a problem: "Solve x² + 5x − 24 = 0 by factoring"'}
+              className={fieldCls}
             />
+            <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+              A topic makes a normal explainer. A math/physics question (optionally with your solving hints) makes a
+              worked-solution video with native equation, geometry and graph scenes.
+            </p>
           </div>
-        </div>
 
-        {Object.keys(voices).length > 0 && (
-          <div>
-            <label className="mb-2 block text-[13px] font-semibold text-foreground">Narrator voice</label>
-            <div className="flex items-center gap-2">
-              <select value={voice} onChange={(e) => setVoice(e.target.value)} className={inputCls}>
-                {Object.entries(voices).map(([id, label]) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={handlePreviewVoice}
-                disabled={!voice}
-                title={previewing ? 'Stop preview' : 'Play a short voice sample'}
-                className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary transition-colors hover:border-primary/50 disabled:opacity-50"
-              >
-                {previewing ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              </button>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
+            <label htmlFor="explainer-guide" className={`${sectionLabel} mb-1.5 block`}>
+              Guide for the AI <span className="font-normal normal-case tracking-normal">— optional</span>
+            </label>
+            <textarea
+              id="explainer-guide"
+              value={guide}
+              onChange={(e) => setGuide(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder={
+                'Tell the AI how this video should go. e.g. "Start by showing the chapter name — Quadratic Equations. Then read the question out. Solve it by factoring, not the formula. Finish by checking the answer back in the equation."'
+              }
+              className={fieldCls}
+            />
+            <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+              Your directions for the script — what to open with, what order to teach in, which method to use. Leave it
+              blank and the AI decides on its own.
+            </p>
+          </div>
+
+          {/* The script is this page's stage: the thing the rest is about. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft-lg">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+              <span className="flex items-center gap-2 text-[13px] font-bold text-foreground">
+                <Sparkles className="h-[15px] w-[15px] text-primary" />
+                Script
+                <span className="font-mono text-[11px] font-normal text-ink3">
+                  {words > 0 ? `${words} words · ~${spoken}s spoken` : 'empty'}
+                </span>
+              </span>
+              <div className="flex items-center gap-2">
+                <label htmlFor="explainer-tone" className="sr-only">
+                  Tone
+                </label>
+                <select
+                  id="explainer-tone"
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value)}
+                  className={chipSelect}
+                >
+                  {TONES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      Tone: {t.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleGenerateScript}
+                  disabled={title.trim().length < 3 || generating}
+                  title={title.trim().length < 3 ? 'Add a title first' : 'Write the script with AI'}
+                  className="inline-flex h-[30px] items-center gap-1.5 rounded-lg bg-primary px-2.5 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                  {generating ? 'Writing…' : 'Generate with AI'}
+                </button>
+              </div>
             </div>
-            <p className="mt-1.5 text-xs text-ink3">Narrates every scene. Press play to hear a sample.</p>
+            <label htmlFor="explainer-script" className="sr-only">
+              Script
+            </label>
+            <textarea
+              id="explainer-script"
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+              rows={14}
+              placeholder="Paste or write your script here — or fill in the title and guide above and click Generate with AI."
+              className="min-h-[260px] w-full flex-1 resize-y border-0 bg-transparent px-4 py-3.5 text-sm leading-relaxed text-foreground outline-none placeholder:text-ink3"
+            />
+            <p className="border-t border-border px-4 py-2 text-[11px] leading-snug text-muted-foreground">
+              The AI splits this into scenes and decides where pictures go and where bullet points do. Generated scripts
+              are fully editable — here, and on the storyboard afterwards.
+            </p>
           </div>
-        )}
+        </section>
 
-        <MusicPicker
-          options={musicOptions}
-          category={musicCategory}
-          trackId={musicTrackId}
-          volume={musicVolume}
-          onChange={(patch) => {
-            if (patch.music_category !== undefined) setMusicCategory(patch.music_category)
-            if (patch.music_track_id !== undefined) setMusicTrackId(patch.music_track_id)
-            if (patch.music_volume !== undefined) setMusicVolume(patch.music_volume)
-          }}
-        />
+        {/* The inspector, matching the editor's rail. */}
+        <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <Section
+              id="format"
+              icon={<Crop />}
+              title="Format"
+              summary={`${aspectRatio} · ~${targetSeconds}s`}
+              open={Boolean(open.format)}
+              onToggle={toggleSection}
+            >
+              <Row label="Aspect ratio">
+                <label htmlFor="explainer-aspect" className="sr-only">
+                  Aspect ratio
+                </label>
+                <select
+                  id="explainer-aspect"
+                  value={aspectRatio}
+                  onChange={(e) => setAspectRatio(e.target.value)}
+                  className={chipSelect}
+                >
+                  {ASPECT_RATIOS.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </Row>
+              <div>
+                <div className="mb-1 flex items-center justify-between text-[13px]">
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <Clock className="h-3 w-3" /> Target length
+                  </span>
+                  <span className="font-mono text-xs font-semibold text-foreground">{targetSeconds}s</span>
+                </div>
+                <label htmlFor="explainer-length" className="sr-only">
+                  Target length in seconds
+                </label>
+                <input
+                  id="explainer-length"
+                  type="range"
+                  min={20}
+                  max={180}
+                  step={10}
+                  value={targetSeconds}
+                  onChange={(e) => setTargetSeconds(Number(e.target.value))}
+                  className="w-full accent-primary"
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  What the AI writer aims for. The real length comes from the narration once it is recorded.
+                </p>
+              </div>
+              <p className="text-[11px] text-muted-foreground">{aspectLabel}</p>
+            </Section>
 
-        {error && (
-          <div className="rounded-xl border border-accent-line bg-accent-soft px-4 py-3 text-sm text-primary">{error}</div>
-        )}
+            <Section
+              id="sound"
+              icon={<Volume2 />}
+              title="Sound"
+              summary={voices[voice] ? String(voices[voice]).split(' ')[0] : 'Default voice'}
+              open={Boolean(open.sound)}
+              onToggle={toggleSection}
+            >
+              {Object.keys(voices).length > 0 && (
+                <>
+                  <Row label="Narrator voice">
+                    <span className="inline-flex items-center gap-1.5">
+                      <label htmlFor="explainer-voice" className="sr-only">
+                        Narrator voice
+                      </label>
+                      <select
+                        id="explainer-voice"
+                        value={voice}
+                        onChange={(e) => setVoice(e.target.value)}
+                        className={chipSelect}
+                      >
+                        {Object.entries(voices).map(([id, label]) => (
+                          <option key={id} value={id}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={handlePreviewVoice}
+                        disabled={!voice}
+                        title={previewing ? 'Stop preview' : 'Play a short voice sample'}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-border bg-card text-primary transition-colors hover:bg-inset disabled:opacity-50"
+                      >
+                        {previewing ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                      </button>
+                    </span>
+                  </Row>
+                  <p className="text-[11px] text-muted-foreground">
+                    Narrates every scene. Press play to hear a sample.
+                  </p>
+                </>
+              )}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="inline-flex h-12 items-center gap-2 rounded-xl bg-primary px-6 text-sm font-bold text-primary-foreground shadow-soft transition-transform hover:scale-[1.01] disabled:opacity-60"
-        >
-          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {submitting ? 'Analyzing…' : 'Generate Storyboard'}
-        </button>
-      </form>
-    </div>
+              <MusicPicker
+                options={musicOptions}
+                category={musicCategory}
+                trackId={musicTrackId}
+                volume={musicVolume}
+                onChange={(patch) => {
+                  if (patch.music_category !== undefined) setMusicCategory(patch.music_category)
+                  if (patch.music_track_id !== undefined) setMusicTrackId(patch.music_track_id)
+                  if (patch.music_volume !== undefined) setMusicVolume(patch.music_volume)
+                }}
+              />
+            </Section>
+          </div>
+
+          <div className="flex flex-none flex-col gap-2.5 border-t border-border p-4">
+            {error && (
+              <div className="rounded-xl border border-accent-line bg-accent-soft px-3 py-2 text-[12px] leading-snug text-primary">
+                {error}
+              </div>
+            )}
+            {!ready && !error && (
+              <p className="text-[12px] leading-snug text-muted-foreground">
+                Add a title and a script of at least a few sentences.
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={submitting || !ready}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-soft transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {submitting ? 'Analyzing…' : 'Generate storyboard'}
+            </button>
+            <span className="text-center text-[11px] text-ink3">
+              Free to plan — credits are only spent when you render.
+            </span>
+          </div>
+        </aside>
+      </div>
+    </form>
   )
 }
