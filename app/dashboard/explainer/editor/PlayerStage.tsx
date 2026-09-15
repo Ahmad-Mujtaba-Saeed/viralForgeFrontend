@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { Player, type PlayerRef } from '@remotion/player'
 import { ExplainerVideo } from '@/lib/remotion/ExplainerVideo'
-import { sceneStartFrames, totalFramesFor } from '@/lib/remotion/timing'
+import { sceneSettledFrames, sceneStartFrames, totalFramesFor } from '@/lib/remotion/timing'
 import type { ShotList } from '@/lib/remotion/types'
 
 /**
@@ -48,6 +48,8 @@ export type StageMeta = {
   durationInFrames: number
   /** First frame of each scene, in storyboard order. */
   starts: number[]
+  /** The frame each scene is actually VISIBLE on — see sceneSettledFrames. */
+  settled: number[]
 }
 
 export default function PlayerStage({
@@ -77,6 +79,10 @@ export default function PlayerStage({
     [shotList, fps]
   )
   const starts = React.useMemo(() => sceneStartFrames(shotList, fps), [shotList, fps])
+  // A scene's start frame is not the frame you can SEE it on: the incoming
+  // transition or the canvas camera's flight is still showing the beat before
+  // it. Seeking and "which scene is playing" both need the settled frame.
+  const settled = React.useMemo(() => sceneSettledFrames(shotList, fps), [shotList, fps])
 
   const inputProps = React.useMemo(
     () => ({ shotList, fps, width: payload.width, height: payload.height }),
@@ -86,8 +92,8 @@ export default function PlayerStage({
   // Report the clock up as soon as it is known, and again whenever the shot
   // list changes underneath us (a scene edit re-paces everything after it).
   React.useEffect(() => {
-    onMeta?.({ fps, durationInFrames, starts })
-  }, [fps, durationInFrames, starts, onMeta])
+    onMeta?.({ fps, durationInFrames, starts, settled })
+  }, [fps, durationInFrames, starts, settled, onMeta])
 
   React.useEffect(() => {
     const player = playerRef.current

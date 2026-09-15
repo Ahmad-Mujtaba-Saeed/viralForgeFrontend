@@ -18,6 +18,7 @@ import {
   Plus,
   LayoutTemplate,
   CreditCard,
+  Mic,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BrandLogo, BrandMark } from "@/components/brand-logo"
@@ -36,6 +37,7 @@ const mainNavItems = [
   { icon: LayoutTemplate, label: "Templates", href: "/dashboard/templates" },
   { icon: FolderOpen, label: "Projects", href: "/dashboard/projects" },
   { icon: Wand2, label: "AI Explainer Video", href: "/dashboard/explainer" },
+  { icon: Mic, label: "My Voices", href: "/dashboard/voices" },
   { icon: CreditCard, label: "Billing & Credits", href: "/dashboard/billing" },
 ]
 

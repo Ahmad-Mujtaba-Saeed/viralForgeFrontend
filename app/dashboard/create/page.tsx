@@ -85,6 +85,16 @@ function CreatePageContent() {
     }
   }, [])
 
+  // The user's own cloned voices (My Voices) — offered beside the template's
+  // stock narrators. `clone_<id>` → name; private to this user.
+  const [cloneVoices, setCloneVoices] = useState<Record<string, string>>({})
+  useEffect(() => {
+    api
+      .get('/api/tts/voices')
+      .then((res) => setCloneVoices(res.data?.clones ?? {}))
+      .catch(() => {})
+  }, [])
+
   const playVoicePreview = async (voiceId: string) => {
     // Clicking the active chip's button stops playback.
     if (previewVoice === voiceId) {
@@ -392,8 +402,10 @@ function CreatePageContent() {
         <div key={fieldKey}>
           <span className="mb-2.5 block text-[13px] font-semibold text-foreground">Narrator voice</span>
           <div className="flex flex-wrap gap-2">
-            {optionList.map((opt) => {
-              const { name, tone } = voiceLabel(opt)
+            {[...Object.keys(cloneVoices), ...optionList].map((opt) => {
+              const { name, tone } = cloneVoices[opt]
+                ? { name: cloneVoices[opt], tone: 'Your voice' }
+                : voiceLabel(opt)
               const active = value === opt
               const previewing = previewVoice === opt
               return (
@@ -743,14 +755,14 @@ function CreatePageContent() {
       if (val === undefined || val === '' || typeof val === 'object') return
       let display = String(val)
       if (k === 'caption_template') display = captionStyleFor(display).label
-      else if (k === 'tts_voice') display = voiceLabel(display).name
+      else if (k === 'tts_voice') display = cloneVoices[display] ?? voiceLabel(display).name
       else if (typeof val === 'boolean') display = val ? 'On' : 'Off'
       else display = prettyLabel(display)
       rows.push({ k: s.label ?? prettyLabel(k), v: display })
     })
     return rows
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detailFields, styleFields, templateSettings, templateConfig?.name, currentProject, isTemplateUploadRequired])
+  }, [detailFields, styleFields, templateSettings, templateConfig?.name, currentProject, isTemplateUploadRequired, cloneVoices])
 
   const renderStepRail = () => {
     if (stepKeys.length <= 1) return null

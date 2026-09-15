@@ -46,7 +46,31 @@ export function StoryboardPageClient() {
   const projectProgress = useProjectProgress(id ?? null)
   // One shot list for the whole editor: the stage plays it and every
   // filmstrip tile renders a frame of it.
-  const player = usePlayerPayload(id ?? '', board?.current_look)
+  //
+  // It is refetched on `current_look` — every style knob, plus `storyboard_rev`
+  // for hand and AI edits — AND on this content stamp. The look hash cannot
+  // see an UPLOAD: dropping a picture into a slot changes what the frame shows
+  // without touching a style setting or the revision counter, so the stage and
+  // the strip went on drawing the empty slot until the page was reloaded. The
+  // stamp is derived from the board, so the 4s revision poll returning the same
+  // storyboard produces the same string and refetches nothing.
+  const boardStamp = useMemo(
+    () =>
+      (board?.scenes ?? [])
+        .map((scene) =>
+          [
+            scene.scene_id,
+            scene.duration_seconds,
+            scene.layout_template,
+            Object.values(scene.slots)
+              .map((slot) => slot.asset?.url ?? '')
+              .join(','),
+          ].join(':')
+        )
+        .join('|'),
+    [board]
+  )
+  const player = usePlayerPayload(id ?? '', `${board?.current_look ?? ''}#${boardStamp}`)
 
   // Generic in-flight tracker so every settings button gets the same
   // "yes, your click registered" feedback (spinner + disabled) without a

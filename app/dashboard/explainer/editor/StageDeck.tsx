@@ -107,19 +107,27 @@ export function StageDeck({
   const fps = meta?.fps ?? board.render_fps ?? 30
   const totalFrames = meta?.durationInFrames ?? 0
   const starts = meta?.starts ?? []
+  // Where each scene is actually ON SCREEN. A scene's start frame still shows
+  // the beat before it (the transition overlaps both cards; the canvas camera
+  // is mid-flight), so parking the playhead there — or calling that scene
+  // "current" — puts the inspector one card ahead of the picture.
+  const settled = meta?.settled ?? []
 
   const handleMeta = React.useCallback((next: StageMeta) => setMeta(next), [])
 
-  // Which scene the playhead is inside: the last one that has started. This is
-  // what keeps the inspector pointed at the beat you are watching.
+  // Which scene the viewer is actually LOOKING at: the last one that has taken
+  // the screen. This is what keeps the inspector pointed at the beat you are
+  // watching — measured against the settled frames, so the selection changes
+  // when the new card arrives rather than when its clock starts.
   const playheadIndex = React.useMemo(() => {
-    if (!starts.length) return 0
+    const marks = settled.length ? settled : starts
+    if (!marks.length) return 0
     let current = 0
-    starts.forEach((start, i) => {
-      if (frame >= start) current = i
+    marks.forEach((mark, i) => {
+      if (frame >= mark) current = i
     })
     return current
-  }, [frame, starts])
+  }, [frame, settled, starts])
 
   const reportedScene = React.useRef<string | null>(null)
   React.useEffect(() => {
@@ -149,20 +157,22 @@ export function StageDeck({
       if (!scene) return
       reportedScene.current = scene.scene_id
       onSelectScene(scene.scene_id)
-      if (source === 'preview' && starts[index] !== undefined) seek(starts[index])
+      const mark = settled[index] ?? starts[index]
+      if (source === 'preview' && mark !== undefined) seek(mark)
     },
-    [scenes, onSelectScene, source, starts, seek]
+    [scenes, onSelectScene, source, starts, settled, seek]
   )
 
   // Selecting a scene anywhere else (filmstrip, inspector) parks the playhead
   // on it, so the stage always shows what the inspector is editing.
   React.useEffect(() => {
     if (source !== 'preview' || playing) return
-    if (!activeSceneId || starts[activeIndex] === undefined) return
+    const mark = settled[activeIndex] ?? starts[activeIndex]
+    if (!activeSceneId || mark === undefined) return
     if (reportedScene.current === activeSceneId) return
     reportedScene.current = activeSceneId
-    seek(starts[activeIndex])
-  }, [activeSceneId, activeIndex, starts, seek, playing, source])
+    seek(mark)
+  }, [activeSceneId, activeIndex, starts, settled, seek, playing, source])
 
   const toggleFullscreen = () => {
     if (source === 'preview') {

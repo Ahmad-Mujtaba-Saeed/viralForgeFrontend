@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { Thumbnail } from '@remotion/player'
 import { ExplainerVideo } from '@/lib/remotion/ExplainerVideo'
-import { sceneStartFrames, totalFramesFor } from '@/lib/remotion/timing'
+import { sceneSettledFrames, totalFramesFor } from '@/lib/remotion/timing'
 import type { PlayerPayload } from './PlayerStage'
 
 /**
@@ -19,9 +19,14 @@ import type { PlayerPayload } from './PlayerStage'
  *
  * Two deliberate details:
  *
- *  - The frame is sampled a little INTO the scene, not on its first frame.
- *    Scene one frame is mid-transition and mid-reveal, so every tile would be
- *    a half-drawn card; a beat and a half in, the reveals have landed.
+ *  - The frame is sampled where the scene has actually TAKEN the screen, not
+ *    on its first frame. A scene's opening frames still belong to the beat
+ *    before it — the incoming transition is overlapping the two cards, or the
+ *    canvas camera is still flying across from the last one — so a tile
+ *    sampled at the start shows its NEIGHBOUR's card, and the whole strip
+ *    reads one scene out of step. `sceneSettledFrames` is the renderer's own
+ *    answer to "when can you see this beat", shared with the stage so the
+ *    tile and the player agree.
  *  - Nothing renders until the tile has been near the viewport. A storyboard
  *    can run to twenty scenes and each thumbnail is a full render of the
  *    composition — mounting them all at once is what would make the strip
@@ -79,16 +84,12 @@ export default function SceneThumb({
     () => Math.max(1, totalFramesFor(shotList, fps)),
     [shotList, fps]
   )
-  const starts = React.useMemo(() => sceneStartFrames(shotList, fps), [shotList, fps])
+  const settled = React.useMemo(() => sceneSettledFrames(shotList, fps), [shotList, fps])
 
-  const frameToDisplay = React.useMemo(() => {
-    const start = starts[sceneIndex] ?? 0
-    const next = starts[sceneIndex + 1] ?? durationInFrames
-    // 1.5s in, but never past the scene's own last frame — a short beat gets
-    // its midpoint instead.
-    const target = start + Math.min(Math.round(fps * 1.5), Math.max(0, Math.floor((next - start) / 2)))
-    return Math.max(0, Math.min(durationInFrames - 1, target))
-  }, [starts, sceneIndex, durationInFrames, fps])
+  const frameToDisplay = React.useMemo(
+    () => Math.max(0, Math.min(durationInFrames - 1, settled[sceneIndex] ?? 0)),
+    [settled, sceneIndex, durationInFrames]
+  )
 
   return (
     <div ref={hostRef} className={className}>

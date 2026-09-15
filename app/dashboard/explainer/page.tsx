@@ -113,6 +113,8 @@ export default function ExplainerCreatePage() {
   // Narrator voice — options follow the admin-selected TTS engine.
   const [voices, setVoices] = useState<Record<string, string>>({})
   const [voice, setVoice] = useState('')
+  // The user's own cloned voices (My Voices), listed above the stock narrators.
+  const [cloneVoices, setCloneVoices] = useState<Record<string, string>>({})
   const [previewing, setPreviewing] = useState(false)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -137,6 +139,7 @@ export default function ExplainerCreatePage() {
       .get('/api/tts/voices', { params: { template: 'ai_explainer_video' } })
       .then((res) => {
         setVoices(res.data?.voices ?? {})
+        setCloneVoices(res.data?.clones ?? {})
         setVoice(res.data?.default ?? '')
       })
       .catch(() => {})
@@ -245,6 +248,10 @@ export default function ExplainerCreatePage() {
   // ~2.5 words a second is the pace the storyboard's own duration estimate
   // uses, so the two agree about how long a script runs.
   const spoken = Math.round(words / 2.5)
+  // Past a minute "240s" stops being a length anyone can picture, and the
+  // slider now reaches six of them.
+  const clock = (seconds: number) =>
+    seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
   const cost = costFor('ai_explainer_video')
   const ready = title.trim().length >= 2 && script.trim().length >= 10
   const aspectLabel = ASPECT_RATIOS.find((r) => r.value === aspectRatio)?.label ?? aspectRatio
@@ -263,7 +270,7 @@ export default function ExplainerCreatePage() {
               {title.trim() || 'New explainer video'}
             </h1>
             <div className="font-mono text-[12px] text-ink3">
-              {words > 0 ? `${words} words · ~${spoken}s` : `target ~${targetSeconds}s`} · {aspectRatio} · draft
+              {words > 0 ? `${words} words · ~${clock(spoken)}` : `target ~${clock(targetSeconds)}`} · {aspectRatio} · draft
             </div>
           </div>
         </div>
@@ -394,7 +401,7 @@ export default function ExplainerCreatePage() {
               id="format"
               icon={<Crop />}
               title="Format"
-              summary={`${aspectRatio} · ~${targetSeconds}s`}
+              summary={`${aspectRatio} · ~${clock(targetSeconds)}`}
               open={Boolean(open.format)}
               onToggle={toggleSection}
             >
@@ -420,7 +427,7 @@ export default function ExplainerCreatePage() {
                   <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                     <Clock className="h-3 w-3" /> Target length
                   </span>
-                  <span className="font-mono text-xs font-semibold text-foreground">{targetSeconds}s</span>
+                  <span className="font-mono text-xs font-semibold text-foreground">{clock(targetSeconds)}</span>
                 </div>
                 <label htmlFor="explainer-length" className="sr-only">
                   Target length in seconds
@@ -429,7 +436,7 @@ export default function ExplainerCreatePage() {
                   id="explainer-length"
                   type="range"
                   min={20}
-                  max={180}
+                  max={360}
                   step={10}
                   value={targetSeconds}
                   onChange={(e) => setTargetSeconds(Number(e.target.value))}
@@ -446,7 +453,9 @@ export default function ExplainerCreatePage() {
               id="sound"
               icon={<Volume2 />}
               title="Sound"
-              summary={voices[voice] ? String(voices[voice]).split(' ')[0] : 'Default voice'}
+              summary={
+                cloneVoices[voice] ?? (voices[voice] ? String(voices[voice]).split(' ')[0] : 'Default voice')
+              }
               open={Boolean(open.sound)}
               onToggle={toggleSection}
             >
@@ -463,11 +472,22 @@ export default function ExplainerCreatePage() {
                         onChange={(e) => setVoice(e.target.value)}
                         className={chipSelect}
                       >
-                        {Object.entries(voices).map(([id, label]) => (
-                          <option key={id} value={id}>
-                            {label}
-                          </option>
-                        ))}
+                        {Object.keys(cloneVoices).length > 0 && (
+                          <optgroup label="My voices">
+                            {Object.entries(cloneVoices).map(([id, label]) => (
+                              <option key={id} value={id}>
+                                {label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <optgroup label="Narrators">
+                          {Object.entries(voices).map(([id, label]) => (
+                            <option key={id} value={id}>
+                              {label}
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                       <button
                         type="button"
@@ -481,7 +501,7 @@ export default function ExplainerCreatePage() {
                     </span>
                   </Row>
                   <p className="text-[11px] text-muted-foreground">
-                    Narrates every scene. Press play to hear a sample.
+                    Narrates every scene. Press play to hear a sample. Clone your own voice under My Voices.
                   </p>
                 </>
               )}
