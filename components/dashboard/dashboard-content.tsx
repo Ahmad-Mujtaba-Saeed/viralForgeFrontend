@@ -120,7 +120,7 @@ export function DashboardContent() {
   const open = (project: Pick<Project, 'id' | 'template_type'>) =>
     router.push(
       project.template_type === 'ai_explainer_video'
-        ? `/dashboard/explainer/${project.id}`
+        ? `/dashboard/explainer/editor?id=${project.id}`
         : `/dashboard/create?projectId=${project.id}`
     )
 
