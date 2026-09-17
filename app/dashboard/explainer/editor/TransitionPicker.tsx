@@ -84,7 +84,7 @@ function Tile({
       onClick={onSelect}
       onMouseEnter={() => setWoken(true)}
       onFocus={() => setWoken(true)}
-      className={`group rounded-lg border p-1.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
+      className={`group block w-full min-w-0 rounded-lg border p-1.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
         active ? 'border-primary bg-accent-soft' : 'border-border bg-card hover:bg-inset'
       }`}
     >
@@ -187,10 +187,10 @@ export function TransitionPicker({
           role="radiogroup"
           aria-label="Scene transition"
           onMouseLeave={() => setHovered(null)}
-          className="mt-2.5 grid grid-cols-3 gap-2"
+          className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3"
         >
           {shown.map((option) => (
-            <div key={option} onMouseEnter={() => setHovered(option)}>
+            <div key={option} className="min-w-0" onMouseEnter={() => setHovered(option)}>
               <Tile
                 option={option}
                 active={option === value}

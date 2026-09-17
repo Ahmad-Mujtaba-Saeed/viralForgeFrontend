@@ -2,8 +2,10 @@
 
 import * as React from 'react'
 import api from '@/lib/axios'
-import { Captions, Check, Download, FileText, Film, Loader2, Pencil, Play, Wand2, X, Zap } from 'lucide-react'
+import { Captions, Check, Download, FileText, Film, ImageIcon, Loader2, Pencil, Play, Wand2, X, Zap } from 'lucide-react'
 import type { Storyboard } from './types'
+import { thumbnailEntries, thumbnailVariant } from './ThumbnailDownload'
+import { useExportDownload, type ExportKind } from './useExportDownload'
 
 /** m:ss over the whole storyboard. */
 const stamp = (seconds: number): string => {
@@ -95,7 +97,31 @@ export function EditorHeader({
 
   const totalSeconds = board.scenes.reduce((a, s) => a + s.duration_seconds, 0)
   const videos = (board.output_videos ?? []).filter((v) => v.url)
-  const hasKit = Boolean(board.output_url || board.srt_url || board.youtube_kit_url || videos.length)
+  const thumbs = thumbnailEntries(board)
+  const { download, busy, isBusy, error: downloadError } = useExportDownload(board.id)
+  const primaryVideo = board.output_url ? [{ aspect: board.aspect_ratio, variant: '' }] : []
+  const kitItems: { kind: ExportKind; variant: string; label: string; icon: React.ReactNode; divider?: boolean }[] = [
+    ...(videos.length ? videos.map((v) => ({ aspect: v.aspect, variant: v.aspect })) : primaryVideo).map((v) => ({
+      kind: 'video' as const,
+      variant: v.variant,
+      label: `MP4 · ${v.aspect}`,
+      icon: <Play className="h-3.5 w-3.5 text-primary" />,
+    })),
+    ...(board.srt_url
+      ? [{ kind: 'srt' as const, variant: '', label: 'SRT captions', icon: <Captions className="h-3.5 w-3.5 text-primary" /> }]
+      : []),
+    ...(board.youtube_kit_url
+      ? [{ kind: 'youtube_kit' as const, variant: '', label: 'YouTube kit', icon: <FileText className="h-3.5 w-3.5 text-primary" /> }]
+      : []),
+    ...thumbs.map((t, i) => ({
+      kind: 'thumbnail' as const,
+      variant: thumbnailVariant(t.orientation),
+      label: `Thumbnail${thumbs.length > 1 ? ` · ${t.orientation === 'portrait' ? '9:16' : '16:9'}` : ''}`,
+      icon: <ImageIcon className="h-3.5 w-3.5 text-primary" />,
+      divider: i === 0,
+    })),
+  ]
+  const hasKit = Boolean(board.output_url || board.srt_url || board.youtube_kit_url || videos.length || thumbs.length)
 
   return (
     <header className="flex flex-none flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-border pb-3.5">
@@ -177,46 +203,21 @@ export function EditorHeader({
           </button>
           {kitOpen && hasKit && (
             <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-60 rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-soft-lg">
-              {(videos.length ? videos : [{ aspect: board.aspect_ratio, label: 'Video', url: board.output_url }]).map(
-                (v) =>
-                  v.url ? (
-                    <a
-                      key={v.aspect}
-                      href={v.url}
-                      download
-                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-semibold text-foreground transition-colors hover:bg-inset"
-                    >
-                      <Play className="h-3.5 w-3.5 text-primary" /> MP4 · {v.aspect}
-                    </a>
-                  ) : null
-              )}
-              {board.srt_url && (
-                <a
-                  href={board.srt_url}
-                  download
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-semibold text-foreground transition-colors hover:bg-inset"
+              {kitItems.map((item) => (
+                <button
+                  key={`${item.kind}:${item.variant}`}
+                  type="button"
+                  onClick={() => void download(item.kind, item.variant)}
+                  disabled={busy !== null}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-inset disabled:opacity-60 ${
+                    item.divider ? 'mt-1 border-t border-border pt-2' : ''
+                  }`}
                 >
-                  <Captions className="h-3.5 w-3.5 text-primary" /> SRT captions
-                </a>
-              )}
-              {board.youtube_kit_url && (
-                <a
-                  href={board.youtube_kit_url}
-                  download
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-semibold text-foreground transition-colors hover:bg-inset"
-                >
-                  <FileText className="h-3.5 w-3.5 text-primary" /> YouTube kit
-                </a>
-              )}
-              {board.thumbnail_url && (
-                <a
-                  href={board.thumbnail_url}
-                  download
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-semibold text-foreground transition-colors hover:bg-inset"
-                >
-                  <Download className="h-3.5 w-3.5 text-primary" /> Thumbnail
-                </a>
-              )}
+                  {isBusy(item.kind, item.variant) ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : item.icon}
+                  {item.label}
+                </button>
+              ))}
+              {downloadError && <p className="px-2.5 pb-1 pt-1 text-[11px] text-warn">{downloadError}</p>}
             </div>
           )}
         </div>

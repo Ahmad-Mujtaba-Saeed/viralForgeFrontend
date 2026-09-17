@@ -164,6 +164,8 @@ export interface Storyboard {
   srt_url?: string | null
   youtube_kit_url?: string | null
   thumbnail_url?: string | null
+  /** The designed thumbnail in each orientation the render produced. */
+  thumbnails?: { orientation: 'landscape' | 'portrait'; url: string }[]
   output_videos?: { aspect: string; label: string; url: string | null }[]
 }
 

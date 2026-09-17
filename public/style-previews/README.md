@@ -24,7 +24,11 @@ npx tsx scripts/style-previews.ts ../b_f7Z3xSZkLVx/public/style-previews motion
 ```
 
 About 10-15 seconds per clip, 35 clips, ~16MB total. Groups: `motion`, `skin`,
-`composition`, `board`, `font`, `transition`.
+`composition`, `board`, `font`, `transition`, `scheme`, `fps`.
+
+The `fps` group flies the canvas camera between two beats with motion blur
+off. Its `60` clip is recorded at 50fps: browsers slow GIF frames shorter than
+2cs, so 50 is the fastest a GIF plays at real speed.
 
 `--stills` re-freezes the poster frames only, leaving the GIFs alone — seconds
 instead of minutes when all that changed is where a poster sits:

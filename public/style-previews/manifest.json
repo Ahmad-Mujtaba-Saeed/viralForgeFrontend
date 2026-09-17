@@ -61,5 +61,9 @@
     "glacier",
     "ember",
     "orchid"
+  ],
+  "fps": [
+    "30",
+    "60"
   ]
 }

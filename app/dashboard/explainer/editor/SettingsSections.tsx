@@ -443,7 +443,7 @@ export function SettingsSections({
               label: fps + ' fps',
               hint:
                 fps >= 60
-                  ? 'Every camera move travels half as far between frames — the smoothest result. Renders take about twice as long.'
+                  ? 'Every camera move travels half as far between frames — the smoothest result. Renders take about twice as long. (The hover clip plays at 50 fps — the most a GIF can show.)'
                   : 'The standard clock. Fast flights lean on motion blur to stay smooth.',
             }))}
           />

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import type { Slot, MediaProvider, MediaHit } from './types'
 import { TextBlockEditor } from './TextBlockEditor'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 /**
  * The free media library, per slot.
@@ -91,98 +92,125 @@ export function MediaLibraryPanel({
   const usable = providers.filter((p) => p.configured && p.kinds.includes(kind))
   const missing = providers.filter((p) => !p.configured)
 
+  // A slide-over above the inspector rather than a strip inside it: the
+  // inspector is ~380px, which left each result a thumbnail too small to judge.
+  // Two per row in a wider sheet shows the actual picture.
   return (
-    <div className="mt-2 rounded-lg border border-primary bg-card p-2.5">
-      <div className="mb-2 flex items-center gap-1.5">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void search(query, kind) }}
-          maxLength={80}
-          placeholder="busy trading floor"
-          className="min-w-0 flex-1 rounded-lg border border-border bg-inset px-2 py-1.5 text-xs text-foreground outline-none placeholder:text-ink3 focus:border-primary"
-        />
-        <button
-          onClick={() => void search(query, kind)}
-          disabled={searching || !query.trim()}
-          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
-        >
-          {searching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />} Search
-        </button>
-      </div>
+    <Sheet open onOpenChange={(open) => { if (!open) onClose() }}>
+      <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-[520px]">
+        <SheetHeader className="border-b border-border pb-3 pr-12">
+          <SheetTitle className="flex items-center gap-2 text-base">
+            <Library className="h-4 w-4 text-primary" /> Free media
+          </SheetTitle>
+          <SheetDescription className="text-xs">
+            Pick a free {kind === 'video' ? 'clip' : 'photo'} for this slot. It replaces what is there now.
+          </SheetDescription>
 
-      {!kindLocked && (
-        <div className="mb-2 flex items-center gap-1">
-          {(['image', 'video'] as const).map((k) => (
+          <div className="mt-2 flex items-center gap-1.5">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void search(query, kind) }}
+              maxLength={80}
+              placeholder="busy trading floor"
+              className="min-w-0 flex-1 rounded-lg border border-border bg-inset px-2.5 py-2 text-sm text-foreground outline-none placeholder:text-ink3 focus:border-primary"
+            />
             <button
-              key={k}
-              onClick={() => { setKind(k); void search(query, k) }}
-              className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                kind === k ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-inset text-muted-foreground hover:bg-card'
-              }`}
+              onClick={() => void search(query, kind)}
+              disabled={searching || !query.trim()}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
             >
-              {k === 'image' ? 'Photos' : 'Clips'}
+              {searching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} Search
             </button>
-          ))}
-          <span className="ml-1 truncate text-[10px] text-ink3">
-            {usable.length > 0 ? usable.map((p) => p.label).join(' · ') : 'no source for this kind'}
-          </span>
-        </div>
-      )}
+          </div>
 
-      {searching && hits.length === 0 && (
-        <div className="flex h-24 items-center justify-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Searching the free libraries…
-        </div>
-      )}
-
-      {!searching && searched && hits.length === 0 && (
-        <p className="py-4 text-center text-[11px] text-muted-foreground">
-          Nothing found for “{query}”. Try fewer, plainer words — or draw it with AI instead.
-        </p>
-      )}
-
-      {hits.length > 0 && (
-        <div className="grid max-h-72 grid-cols-3 gap-1.5 overflow-y-auto">
-          {hits.map((hit) => (
-            <button
-              key={hit.id}
-              onClick={() => void use(hit)}
-              disabled={adopting !== null}
-              title={`${hit.title || hit.provider_label}${hit.credit?.author ? ` — ${hit.credit.author}` : ''}\n${hit.license}`}
-              className="group relative aspect-video overflow-hidden rounded-md border border-border bg-inset disabled:cursor-not-allowed"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={hit.thumb} alt={hit.title} loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
-              <span className="absolute bottom-0 left-0 right-0 truncate bg-black/70 px-1 py-0.5 text-left text-[9px] font-semibold text-white">
-                {hit.provider_label}{hit.duration ? ` · ${hit.duration}s` : ''}
+          {!kindLocked && (
+            <div className="mt-2 flex items-center gap-1">
+              {(['image', 'video'] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => { setKind(k); void search(query, k) }}
+                  className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+                    kind === k ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-inset text-muted-foreground hover:bg-card'
+                  }`}
+                >
+                  {k === 'image' ? 'Photos' : 'Clips'}
+                </button>
+              ))}
+              <span className="ml-1 truncate text-[11px] text-ink3">
+                {usable.length > 0 ? usable.map((p) => p.label).join(' · ') : 'no source for this kind'}
               </span>
-              {adopting === hit.id && (
-                <span className="absolute inset-0 flex items-center justify-center bg-black/60">
-                  <Loader2 className="h-4 w-4 animate-spin text-white" />
-                </span>
-              )}
-            </button>
-          ))}
+            </div>
+          )}
+        </SheetHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {searching && hits.length === 0 && (
+            <div className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Searching the free libraries…
+            </div>
+          )}
+
+          {!searching && searched && hits.length === 0 && (
+            <p className="py-8 text-center text-xs text-muted-foreground">
+              Nothing found for “{query}”. Try fewer, plainer words — or draw it with AI instead.
+            </p>
+          )}
+
+          {hits.length > 0 && (
+            <div className={`grid grid-cols-2 gap-3 transition-opacity ${searching ? 'opacity-60' : ''}`}>
+              {hits.map((hit) => (
+                <button
+                  key={hit.id}
+                  onClick={() => void use(hit)}
+                  disabled={adopting !== null}
+                  title={`${hit.title || hit.provider_label}${hit.credit?.author ? ` — ${hit.credit.author}` : ''}
+${hit.license}`}
+                  className="group block w-full overflow-hidden rounded-lg border border-border bg-inset text-left outline-none transition-colors hover:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed"
+                >
+                  <div className="relative aspect-video w-full overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={hit.thumb} alt={hit.title} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    {hit.duration ? (
+                      <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                        {hit.duration}s
+                      </span>
+                    ) : null}
+                    {adopting === hit.id && (
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/60">
+                        <Loader2 className="h-5 w-5 animate-spin text-white" />
+                      </span>
+                    )}
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <p className="truncate text-[11px] font-semibold text-foreground">{hit.title || hit.provider_label}</p>
+                    <p className="truncate text-[10px] text-ink3">
+                      {hit.provider_label}{hit.credit?.author ? ` · ${hit.credit.author}` : ''}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {error && <p className="mt-3 text-xs text-warn">{error}</p>}
         </div>
-      )}
 
-      {error && <p className="mt-1.5 text-[11px] text-warn">{error}</p>}
-
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="truncate text-[10px] text-ink3">
-          {missing.length > 0
-            ? `Add a ${missing.map((p) => p.label).join(' / ')} key in admin settings for more results.`
-            : 'Free to use. Creative Commons results keep their credit on the scene.'}
-        </span>
-        <button
-          onClick={onClose}
-          className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-inset"
-        >
-          Close
-        </button>
-      </div>
-    </div>
+        <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3">
+          <span className="min-w-0 text-[11px] leading-snug text-ink3">
+            {missing.length > 0
+              ? `Add a ${missing.map((p) => p.label).join(' / ')} key in admin settings for more results.`
+              : 'Free to use. Creative Commons results keep their credit on the scene.'}
+          </span>
+          <button
+            onClick={onClose}
+            className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-inset"
+          >
+            Close
+          </button>
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -936,7 +964,7 @@ export function SlotCard({
       {/* The brief, in plain words: what shot works here and what to avoid.
           It is the answer to "what am I supposed to put in this box?", which
           the description alone — written as an image PROMPT — never gave. */}
-      {!libraryOpen && !panelOpen && slot.asset_request?.guidance && (
+      {!panelOpen && slot.asset_request?.guidance && (
         <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
           <Eye className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
           <span>{slot.asset_request.guidance}</span>

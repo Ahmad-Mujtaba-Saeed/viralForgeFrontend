@@ -10,6 +10,8 @@ import {
 import type { PlayerPayload, StageMeta } from './PlayerStage'
 import type { PlayerTiming } from './usePlayerPayload'
 import { COMPOSITION_LABELS, type Storyboard } from './types'
+import { ThumbnailDownload } from './ThumbnailDownload'
+import { useExportDownload, type ExportKind } from './useExportDownload'
 
 /**
  * StageDeck — the video, and everything you do to the video.
@@ -100,6 +102,19 @@ export function StageDeck({
   }, [hasVideo, stale])
 
   const [finalAspect, setFinalAspect] = React.useState<string | null>(null)
+  // The manifest's aspect picks the variant; without a manifest it's the primary render.
+  const finalVariant = videos.length ? finalAspect ?? videos[0]?.aspect ?? '' : ''
+  const { download, busy, isBusy, error: downloadError } = useExportDownload(board.id)
+  const dl = (kind: ExportKind, variant: string, icon: React.ReactNode, label: string) => (
+    <button
+      type="button"
+      onClick={() => void download(kind, variant)}
+      disabled={busy !== null}
+      className="inline-flex items-center gap-1 font-semibold text-white/75 hover:text-white disabled:opacity-60"
+    >
+      {isBusy(kind, variant) ? <Loader2 className="h-3 w-3 animate-spin" /> : icon} {label}
+    </button>
+  )
   const finalUrl =
     videos.find((v) => v.aspect === (finalAspect ?? videos[0]?.aspect))?.url ?? board.output_url ?? undefined
 
@@ -405,21 +420,11 @@ export function StageDeck({
                   style changed since this render
                 </span>
               )}
-              {finalUrl && (
-                <a href={finalUrl} download className="inline-flex items-center gap-1 font-semibold text-white/75 hover:text-white">
-                  <Download className="h-3 w-3" /> MP4
-                </a>
-              )}
-              {board.srt_url && (
-                <a href={board.srt_url} download className="inline-flex items-center gap-1 font-semibold text-white/75 hover:text-white">
-                  <Captions className="h-3 w-3" /> SRT
-                </a>
-              )}
-              {board.youtube_kit_url && (
-                <a href={board.youtube_kit_url} download className="inline-flex items-center gap-1 font-semibold text-white/75 hover:text-white">
-                  <FileText className="h-3 w-3" /> YouTube kit
-                </a>
-              )}
+              {finalUrl && dl('video', finalVariant, <Download className="h-3 w-3" />, 'MP4')}
+              {board.srt_url && dl('srt', '', <Captions className="h-3 w-3" />, 'SRT')}
+              {board.youtube_kit_url && dl('youtube_kit', '', <FileText className="h-3 w-3" />, 'YouTube kit')}
+              <ThumbnailDownload board={board} />
+              {downloadError && <span className="text-warn">{downloadError}</span>}
             </>
           ) : payloadError ? (
             <span className="inline-flex items-center gap-1 text-warn">
