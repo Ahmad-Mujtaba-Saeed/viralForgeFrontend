@@ -27,6 +27,7 @@ export function SceneInspector({
   onAskAi,
   targeted,
   revising,
+  elementPanel,
 }: {
   board: Storyboard
   projectId: string
@@ -36,6 +37,8 @@ export function SceneInspector({
   onAskAi: (sceneId: string) => void
   targeted: boolean
   revising: boolean
+  /** The on-stage editing panel for this scene (page-owned). */
+  elementPanel?: React.ReactNode
 }) {
   const templateLabel = board.templates?.[scene.layout_template]?.label || scene.layout_template
   const slotKeys = Object.keys(scene.slots)
@@ -112,6 +115,7 @@ export function SceneInspector({
       </div>
 
       <div className="flex flex-col gap-3.5 px-4 py-4">
+        {elementPanel}
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-ink3">Narration</span>

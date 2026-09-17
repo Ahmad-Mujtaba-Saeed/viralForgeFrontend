@@ -5,13 +5,28 @@ import dynamic from 'next/dynamic'
 import type { PlayerRef } from '@remotion/player'
 import {
   AlertTriangle, Captions, Crop, Download, FileText, Gauge, Layers, Loader2, Maximize,
-  Music, Pause, Play, RefreshCw, RotateCcw, SkipBack, SkipForward, Volume2, VolumeX, X,
+  MousePointerClick, Music, Pause, Play, RefreshCw, RotateCcw, SkipBack, SkipForward, Volume2, VolumeX, X,
 } from 'lucide-react'
 import type { PlayerPayload, StageMeta } from './PlayerStage'
 import type { PlayerTiming } from './usePlayerPayload'
 import { COMPOSITION_LABELS, type Storyboard } from './types'
 import { ThumbnailDownload } from './ThumbnailDownload'
 import { useExportDownload, type ExportKind } from './useExportDownload'
+import { EditStage } from './editing/EditStage'
+import type { ElementEditsApi, Selection } from './editing/elementEdits'
+
+/** Everything the deck needs to host on-stage editing; the page owns it. */
+export type StageEditing = {
+  enabled: boolean
+  setEnabled: (on: boolean) => void
+  selection: Selection | null
+  onSelect: (sel: Selection | null) => void
+  onEditText: (sel: Selection) => void
+  api: ElementEditsApi
+  swatches: string[]
+  /** Wraps the player only — the page reads rendered text through it. */
+  stageRootRef: React.RefObject<HTMLDivElement | null>
+}
 
 /**
  * StageDeck — the video, and everything you do to the video.
@@ -65,6 +80,7 @@ export function StageDeck({
   settingsOpen,
   onToggleSettings,
   settingsPanel,
+  editing,
 }: {
   board: Storyboard
   /** The shot list, fetched once by the page and shared with the filmstrip. */
@@ -79,6 +95,7 @@ export function StageDeck({
   onToggleSettings: () => void
   /** The "Playback & render" popover body — owned by the page, shown here. */
   settingsPanel: React.ReactNode
+  editing?: StageEditing
 }) {
   const playerRef = React.useRef<PlayerRef | null>(null)
   const shellRef = React.useRef<HTMLDivElement | null>(null)
@@ -130,6 +147,24 @@ export function StageDeck({
 
   const handleMeta = React.useCallback((next: StageMeta) => setMeta(next), [])
 
+  // Where to park for EDITING: late in the scene, once every line and picture
+  // has landed but before the exit cascade starts, so what you click on is
+  // the finished card rather than the first word of it.
+  const showcase = React.useMemo(
+    () =>
+      settled.map((mark, i) => {
+        const next = starts[i + 1]
+        const end = next !== undefined ? next - Math.round(fps * 0.6) : totalFrames - 1 - Math.round(fps * 0.2)
+        return Math.max(mark, Math.min(end, Math.max(0, totalFrames - 1)))
+      }),
+    [settled, starts, fps, totalFrames]
+  )
+  const editOn = Boolean(editing?.enabled) && source === 'preview'
+  const parkFrame = React.useCallback(
+    (i: number): number | undefined => (editOn ? showcase[i] : undefined) ?? settled[i] ?? starts[i],
+    [editOn, showcase, settled, starts]
+  )
+
   // Which scene the viewer is actually LOOKING at: the last one that has taken
   // the screen. This is what keeps the inspector pointed at the beat you are
   // watching — measured against the settled frames, so the selection changes
@@ -172,22 +207,33 @@ export function StageDeck({
       if (!scene) return
       reportedScene.current = scene.scene_id
       onSelectScene(scene.scene_id)
-      const mark = settled[index] ?? starts[index]
+      const mark = parkFrame(index)
       if (source === 'preview' && mark !== undefined) seek(mark)
     },
-    [scenes, onSelectScene, source, starts, settled, seek]
+    [scenes, onSelectScene, source, parkFrame, seek]
   )
 
   // Selecting a scene anywhere else (filmstrip, inspector) parks the playhead
   // on it, so the stage always shows what the inspector is editing.
   React.useEffect(() => {
     if (source !== 'preview' || playing) return
-    const mark = settled[activeIndex] ?? starts[activeIndex]
+    const mark = parkFrame(activeIndex)
     if (!activeSceneId || mark === undefined) return
     if (reportedScene.current === activeSceneId) return
     reportedScene.current = activeSceneId
     seek(mark)
-  }, [activeSceneId, activeIndex, starts, settled, seek, playing, source])
+  }, [activeSceneId, activeIndex, parkFrame, seek, playing, source])
+
+  // Turning editing on stops the video on the finished card of this scene.
+  const editWasOn = React.useRef(false)
+  React.useEffect(() => {
+    if (editOn && !editWasOn.current) {
+      playerRef.current?.pause()
+      const mark = showcase[activeIndex]
+      if (mark !== undefined) seek(mark)
+    }
+    editWasOn.current = editOn
+  }, [editOn, showcase, activeIndex, seek])
 
   const toggleFullscreen = () => {
     if (source === 'preview') {
@@ -266,14 +312,38 @@ export function StageDeck({
               </span>
             </div>
           ) : (
-            <PlayerStage
-              payload={payload}
-              playerRef={playerRef}
-              onMeta={handleMeta}
-              onFrame={setFrame}
-              onPlayingChange={setPlaying}
-              onMutedChange={setMuted}
-            />
+            <div ref={editing?.stageRootRef} className="relative h-full w-full">
+              <PlayerStage
+                payload={payload}
+                playerRef={playerRef}
+                onMeta={handleMeta}
+                onFrame={setFrame}
+                onPlayingChange={setPlaying}
+                onMutedChange={setMuted}
+              />
+              {editOn && editing && (
+                <EditStage
+                  rootRef={editing.stageRootRef}
+                  compositionWidth={payload.width}
+                  compositionHeight={payload.height}
+                  selection={editing.selection}
+                  onSelect={(sel) => {
+                    if (sel) {
+                      // Picked on the stage: the inspector follows, the
+                      // playhead must NOT jump out from under the pointer.
+                      reportedScene.current = sel.sceneId
+                      onSelectScene(sel.sceneId)
+                    }
+                    editing.onSelect(sel)
+                  }}
+                  onEditText={editing.onEditText}
+                  onInteract={() => playerRef.current?.pause()}
+                  edits={editing.api}
+                  swatches={editing.swatches}
+                  slotKeysOf={(sceneId) => Object.keys(scenes.find((s) => s.scene_id === sceneId)?.slots ?? {})}
+                />
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -347,6 +417,24 @@ export function StageDeck({
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {editing && payload && (
+              <button
+                onClick={() => {
+                  const next = !editing.enabled
+                  if (next) setSource('preview')
+                  editing.setEnabled(next)
+                }}
+                title={editing.enabled ? 'Stop editing the frame' : 'Click, drag and restyle what is on screen'}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                  editing.enabled
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-white/10 text-white/80 hover:bg-white/20'
+                }`}
+              >
+                <MousePointerClick className="h-3.5 w-3.5" />
+                {editing.enabled ? 'Editing' : 'Edit frame'}
+              </button>
+            )}
             {hasVideo && (
               <div className="inline-flex overflow-hidden rounded-lg border border-white/15">
                 {(['preview', 'final'] as const).map((key) => (
@@ -426,6 +514,11 @@ export function StageDeck({
               <ThumbnailDownload board={board} />
               {downloadError && <span className="text-warn">{downloadError}</span>}
             </>
+          ) : editOn ? (
+            <span className="inline-flex items-center gap-1 text-white/70">
+              <MousePointerClick className="h-3 w-3" /> Editing the frame — drag to move, pull a corner to resize,
+              Delete removes, Ctrl+Z undoes. Changes are used in the render.
+            </span>
           ) : payloadError ? (
             <span className="inline-flex items-center gap-1 text-warn">
               <AlertTriangle className="h-3 w-3" /> {payloadError}

@@ -78,6 +78,8 @@ export interface Scene {
   layout_template: string
   transition: string
   slots: Record<string, Slot>
+  /** Hand edits from the preview stage, keyed by element id. */
+  element_edits?: Record<string, import('@/lib/remotion/types').ElementEdit>
 }
 export interface Theme {
   name: string

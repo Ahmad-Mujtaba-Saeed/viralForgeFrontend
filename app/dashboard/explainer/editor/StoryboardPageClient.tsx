@@ -19,6 +19,10 @@ import { RevisePanel } from './RevisePanel'
 import { AddSceneDialog } from './AddSceneDialog'
 import { CustomSchemeDialog } from './CustomSchemeDialog'
 import { usePlayerPayload } from './usePlayerPayload'
+import { ElementPanel } from './editing/ElementPanel'
+import {
+  parseEditId, useElementEdits, withLiveEdits, type Selection,
+} from './editing/elementEdits'
 import type { Storyboard } from './types'
 
 /**
@@ -129,6 +133,67 @@ export function StoryboardPageClient() {
   useEffect(() => {
     fetchBoard()
   }, [fetchBoard])
+
+  // ---- On-stage editing ------------------------------------------------------
+  // The page owns the edits (the stage, the inspector and the filmstrip all
+  // read them) and feeds the player a shot list with the live, possibly
+  // unsaved, edits laid over it — so a drag moves the real frame at once.
+  const elementEdits = useElementEdits(id ?? '', board, fetchBoard)
+  const livePayload = useMemo(
+    () => withLiveEdits(player.payload, elementEdits.edits),
+    [player.payload, elementEdits.edits]
+  )
+  const [editMode, setEditMode] = useState(false)
+  const [selection, setSelection] = useState<Selection | null>(null)
+  const [textFocusToken, setTextFocusToken] = useState(0)
+  const stageRootRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!editMode) setSelection(null)
+  }, [editMode])
+  // A selection belongs to one scene; picking another scene drops it.
+  useEffect(() => {
+    if (selection && activeSceneId && selection.sceneId !== activeSceneId) setSelection(null)
+  }, [activeSceneId, selection])
+
+  const swatches = useMemo(() => {
+    const t = (player.payload?.shot_list as { theme?: Record<string, string> } | undefined)?.theme
+    return t ? [t.text, t.accent, t.accent2, t.muted].filter(Boolean) : []
+  }, [player.payload])
+
+  /** The words an element shows: the card's own field if it has one, else the stage's. */
+  const readText = useCallback(
+    (sel: Selection): string => {
+      const scene = board?.scenes.find((s) => s.scene_id === sel.sceneId)
+      if (scene) {
+        const { slotKey, field, index } = parseEditId(sel.id, Object.keys(scene.slots))
+        const slots = slotKey ? [scene.slots[slotKey]] : Object.values(scene.slots)
+        for (const slot of slots) {
+          const v = (slot as unknown as Record<string, unknown>)?.[field]
+          if (index !== null && Array.isArray(v) && typeof v[index] === 'string') return v[index]
+          if (index === null && typeof v === 'string' && v.trim()) return v
+        }
+      }
+      const root = stageRootRef.current
+      const el = root?.querySelector(
+        `[data-edit-scene="${CSS.escape(sel.sceneId)}"][data-edit-id="${CSS.escape(sel.id)}"]`
+      )
+      if (!el) return ''
+      // Kinetic headings draw one span per word with no space characters, so
+      // join the text nodes rather than trusting textContent.
+      const parts: string[] = []
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) parts.push(walker.currentNode.textContent ?? '')
+      return parts.join(' ').replace(/\s+/g, ' ').trim()
+    },
+    [board]
+  )
+
+  const onEditText = useCallback((sel: Selection) => {
+    setSelection(sel)
+    setActiveSceneId(sel.sceneId)
+    setTextFocusToken((n) => n + 1)
+  }, [])
 
   // Realtime instead of polling: the backend broadcasts on the same
   // project.{id} Pusher channel during both analysis and rendering. Any one
@@ -553,7 +618,7 @@ export function StoryboardPageClient() {
 
             <StageDeck
               board={board}
-              payload={player.payload}
+              payload={livePayload}
               payloadLoading={player.loading}
               payloadError={player.error}
               timing={player.timing}
@@ -563,11 +628,21 @@ export function StoryboardPageClient() {
               settingsOpen={settingsOpen}
               onToggleSettings={() => setSettingsOpen((o) => !o)}
               settingsPanel={settingsPanel}
+              editing={{
+                enabled: editMode,
+                setEnabled: setEditMode,
+                selection,
+                onSelect: setSelection,
+                onEditText,
+                api: elementEdits,
+                swatches,
+                stageRootRef,
+              }}
             />
 
             <SceneFilmstrip
               board={board}
-              payload={player.payload}
+              payload={livePayload}
               activeSceneId={activeScene?.scene_id ?? null}
               onSelect={setActiveSceneId}
               onAddScene={() => setAddSceneOpen(true)}
@@ -587,6 +662,21 @@ export function StoryboardPageClient() {
                   onAskAi={askAiAbout}
                   targeted={reviseTargets.includes(activeScene.scene_id)}
                   revising={revising}
+                  elementPanel={
+                    <ElementPanel
+                      projectId={id}
+                      scene={activeScene}
+                      selection={selection?.sceneId === activeScene.scene_id ? selection : null}
+                      onSelect={setSelection}
+                      edits={elementEdits}
+                      swatches={swatches}
+                      readText={readText}
+                      focusTextToken={textFocusToken}
+                      onSlotSaved={fetchBoard}
+                      editMode={editMode}
+                      onEnterEditMode={() => setEditMode(true)}
+                    />
+                  }
                 />
               )}
               <SettingsSections
