@@ -740,3 +740,23 @@
 :root[data-theme='prism'] .bg-background {
   background-color: transparent;
 }
+
+/* …but the overlay primitives also paint with `bg-background`, and the rule
+   above left sheets, dialogs and drawers see-through over the dimmed page —
+   text unreadable. They float above everything, so they take the popover
+   surface (near-opaque frosted glass in both glass skins) instead. Same
+   specificity as the rule above and later in the file, so this wins; a
+   component that passes its own bg-* class keeps it. */
+:root[data-theme='aurora'] [data-slot='sheet-content'].bg-background,
+:root[data-theme='aurora'] [data-slot='dialog-content'].bg-background,
+:root[data-theme='aurora'] [data-slot='alert-dialog-content'].bg-background,
+:root[data-theme='aurora'] [data-slot='drawer-content'].bg-background,
+:root[data-theme='prism'] [data-slot='sheet-content'].bg-background,
+:root[data-theme='prism'] [data-slot='dialog-content'].bg-background,
+:root[data-theme='prism'] [data-slot='alert-dialog-content'].bg-background,
+:root[data-theme='prism'] [data-slot='drawer-content'].bg-background {
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+}
