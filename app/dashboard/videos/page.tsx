@@ -100,7 +100,7 @@ const buildVideoItemsFromProject = (project: any): VideoItem[] => {
   return outputs.map((output: any, index: number) => ({
     ...base,
     key: `${project.id}-${index + 1}`,
-    title: `${base.title} · Clip ${index + 1}`,
+    title: output.title ? `${output.title}` : `${base.title} · Clip ${index + 1}`,
     thumbnail_path: output.thumbnail || base.thumbnail_path,
     duration: formatClipDuration(output.duration) || base.duration,
     outputPath: output.url,

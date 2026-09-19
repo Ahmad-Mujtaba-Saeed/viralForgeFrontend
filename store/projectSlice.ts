@@ -7,6 +7,13 @@ export interface ProjectOutputVideo {
   duration?: number | null
   score?: number | null
   subtitle?: string | null
+  /** Long Video to Shorts: how this short was edited. */
+  edit_style?: string | null
+  layout?: string | null
+  scene_type?: string | null
+  title?: string | null
+  hook?: string | null
+  hashtags?: string[]
 }
 
 export interface Project {

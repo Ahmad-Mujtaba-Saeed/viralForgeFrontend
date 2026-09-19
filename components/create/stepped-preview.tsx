@@ -7,6 +7,58 @@ interface PreviewOutputVideo {
   url: string | null
   thumbnail?: string | null
   duration?: number | null
+  edit_style?: string | null
+  layout?: string | null
+  title?: string | null
+  hashtags?: string[]
+}
+
+const LAYOUT_LABELS: Record<string, string> = {
+  fill_follow: "Follows the speaker",
+  stack_two: "Two speakers stacked",
+  facecam_top_gameplay: "Facecam over gameplay",
+  two_facecams_top_gameplay: "Two cams over gameplay",
+  blur_fit: "Full frame on blur",
+  gameplay_split_stock: "Speaker + gameplay",
+}
+
+/** What the AI did to the selected short, and what to post it with. */
+function ClipDetails({ clip }: { clip: PreviewOutputVideo }) {
+  const [copied, setCopied] = React.useState(false)
+  if (!clip.edit_style && !clip.title) return null
+  const post = [clip.title, (clip.hashtags ?? []).join(" ")].filter(Boolean).join(String.fromCharCode(10))
+  return (
+    <div className="rounded-xl border border-border bg-card p-3 text-left">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {clip.edit_style && (
+          <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-bold text-primary">{clip.edit_style}</span>
+        )}
+        {clip.layout && LAYOUT_LABELS[clip.layout] && (
+          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+            {LAYOUT_LABELS[clip.layout]}
+          </span>
+        )}
+      </div>
+      {clip.title && <p className="mt-2 text-[13px] font-semibold leading-snug text-foreground">{clip.title}</p>}
+      {clip.hashtags && clip.hashtags.length > 0 && (
+        <p className="mt-1 text-[12px] text-primary">{clip.hashtags.join(" ")}</p>
+      )}
+      {post && (
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard?.writeText(post).then(() => {
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            })
+          }}
+          className="mt-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+        >
+          {copied ? "Copied" : "Copy title + hashtags"}
+        </button>
+      )}
+    </div>
+  )
 }
 
 interface SteppedPreviewProps {
@@ -167,6 +219,7 @@ export function SteppedPreview({
           ))}
         </div>
       )}
+      {isComplete && clips.length > 0 && <ClipDetails clip={clips[Math.min(clipIndex, clips.length - 1)]} />}
 
       <div className="flex gap-2">
         {[
