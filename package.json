@@ -43,6 +43,7 @@
     "@remotion/player": "4.0.484",
     "@remotion/transitions": "4.0.484",
     "@vercel/analytics": "1.6.1",
+    "@webprodigies/flute": "0.1.2",
     "autoprefixer": "^10.4.20",
     "axios": "^1.16.0",
     "class-variance-authority": "^0.7.1",

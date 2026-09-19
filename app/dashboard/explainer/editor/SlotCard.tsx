@@ -397,6 +397,33 @@ export function SlotCard({
           </p>
         </div>
       )
+    } else if (slot.content_type === 'cinematic') {
+      // The key explaining beat, staged in depth. The storyboard lists its
+      // parts in arrival order with the word that brings each one in; the
+      // camera moves only exist in motion, so the Play tab is where to see it.
+      const parts: Array<Record<string, any>> = Array.isArray(s.elements) ? s.elements : []
+      summary = (
+        <div className="text-sm text-foreground">
+          {parts.length === 0 ? (
+            <p className="text-muted-foreground">Waiting to be staged: {s.brief || 'no brief'}</p>
+          ) : (
+            <ol className="space-y-0.5">
+              {parts.map((p, i) => (
+                <li key={i} className="flex items-baseline gap-1.5">
+                  <span className="text-[11px] text-ink3">{i + 1}.</span>
+                  <span className="font-medium text-primary">
+                    {p.kind === 'formula' ? p.formula : p.kind === 'html' ? 'Drawn piece' : p.text}
+                  </span>
+                  {p.word ? <span className="text-[11px] text-ink3">on “{p.word}”</span> : null}
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mt-1.5 text-[11px] text-ink3">
+            Cinematic · {parts.length} part{parts.length === 1 ? '' : 's'} arriving in depth with camera moves — press Play to see it
+          </p>
+        </div>
+      )
     } else if (slot.content_type === 'versus') {
       summary = (
         <div className="text-sm text-foreground">

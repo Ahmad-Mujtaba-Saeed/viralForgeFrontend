@@ -33,11 +33,21 @@ const windowAt = (cx: number, cy: number, cw: number, ch: number, sw: number, sh
 };
 
 /** Grow a box to the destination aspect around its centre (cover semantics). */
-const fitBox = (box: Box, aspect: number, sw: number, sh: number): Rect => {
+const fitBox = (box: Box, aspect: number, sw: number, sh: number, inset = false): Rect => {
   let w = box[2] * sw;
   let h = box[3] * sh;
   const cx = (box[0] + box[2] / 2) * sw;
   const cy = (box[1] + box[3] / 2) * sh;
+  if (inset) {
+    // Trim inside the box (cover within it), keeping the upper part: a
+    // webcam's face sits high and the strip under it is overlay chrome.
+    if (w / h > aspect) {
+      w = h * aspect;
+      return windowAt(cx, box[1] * sh + h / 2, w, h, sw, sh);
+    }
+    const nh = w / aspect;
+    return windowAt(cx, box[1] * sh + nh / 2 + (h - nh) * 0.25, w, nh, sw, sh);
+  }
   if (w / h > aspect) h = w / aspect;
   else w = h * aspect;
   // Too big for the frame: shrink back to fit, keeping the aspect.
@@ -107,6 +117,39 @@ export const zoomAt = (events: ShortEvent[], t: number, drift: number, total: nu
   return z;
 };
 
+/**
+ * How far a reaction takeover has progressed at output time t (0 = the normal
+ * layout, 1 = the streamer's cam fills the screen). The classic stream-clip
+ * move: on the big reaction the game gets out of the way.
+ */
+export const takeoverAt = (events: ShortEvent[], t: number): { k: number; dest: Box } => {
+  let k = 0;
+  let dest: Box = TAKEOVER_DEST;
+  for (const e of events) {
+    if (e.type !== 'takeover' || t < e.start || t > e.end) continue;
+    const len = Math.max(0.1, e.end - e.start);
+    const inT = Math.min(1, (t - e.start) / Math.min(0.22, len / 3));
+    const outT = Math.min(1, (e.end - t) / Math.min(0.3, len / 3));
+    const x = Math.min(inT, outT);
+    const eased = x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+    if (eased > k) {
+      k = eased;
+      dest = e.dest ?? TAKEOVER_DEST;
+    }
+  }
+  return { k, dest };
+};
+
+/**
+ * Where a takeover grows the cam to: full width, a near-square in the middle.
+ * Not the whole 9:16 — a webcam is ~4:3, so filling the phone means cropping
+ * away most of it and upscaling what is left several times over.
+ */
+const TAKEOVER_DEST: Box = [0, 0.16, 1, 0.56];
+
+const lerpBox = (a: Box, b: Box, k: number): Box =>
+  [0, 1, 2, 3].map((i) => a[i] + (b[i] - a[i]) * k) as Box;
+
 const PanelView: React.FC<{
   panel: Panel;
   props: ShortProps;
@@ -137,7 +180,7 @@ const PanelView: React.FC<{
     const c = cropAt(panel.track.keys, outToSrc(placed, t));
     win = windowAt(c.cx * sw, c.cy * sh, cw * scale, ch * scale, sw, sh);
   } else if (panel.crop) {
-    win = fitBox(panel.crop, aspect, sw, sh);
+    win = fitBox(panel.crop, aspect, sw, sh, !!panel.inset);
   } else {
     win = fitBox([0, 0, 1, 1], aspect, sw, sh);
   }
@@ -219,6 +262,11 @@ export const Panels: React.FC<{
   const { fps } = useVideoConfig();
   const t = frame / fps;
   const layout = props.layout;
+  const { k: take, dest: takeDest } = takeoverAt(props.events, t);
+  // During a takeover the primary panel is drawn last so it covers the rest.
+  const order = layout.panels
+    .map((panel, i) => ({ panel, i }))
+    .sort((a, b) => (take > 0 ? Number(!!a.panel.primary) - Number(!!b.panel.primary) : a.i - b.i));
 
   return (
     <AbsoluteFill>
@@ -234,17 +282,21 @@ export const Panels: React.FC<{
       ) : layout.background === 'gradient' ? (
         <AbsoluteFill style={{ background: `linear-gradient(160deg, #111 0%, ${props.style.accent}55 100%)` }} />
       ) : null}
-      {layout.panels.map((panel, i) => (
+      {order.map(({ panel, i }) => (
         <PanelView
           key={i}
-          panel={panel}
+          panel={
+            take > 0 && panel.primary
+              ? { ...panel, dest: lerpBox(panel.dest, takeDest, take), radius: (panel.radius ?? 0) * (1 - take) }
+              : panel
+          }
           props={props}
           placed={placed}
           zoom={panel.primary ? zoomAt(props.events, t, props.style.drift, total) : 1}
           filter={filter}
         />
       ))}
-      {layout.divider ? (
+      {layout.divider && take < 0.05 ? (
         <DividerLines panels={layout.panels} color={layout.divider.color} thickness={layout.divider.thickness} />
       ) : null}
     </AbsoluteFill>

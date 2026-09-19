@@ -2,7 +2,7 @@ import type * as React from 'react'
 import {
   Square, Columns2, Rows2, PanelRight, PanelTop, Swords, BarChart3, Sigma, ListChecks,
   Grid3x3, BookMarked, History, Workflow, ArrowLeftRight, Trophy, Gauge, Quote,
-  Smartphone, Images, LayoutGrid, Wand2, MapPin, Newspaper, Calculator, Triangle,
+  Smartphone, Images, LayoutGrid, Wand2, Clapperboard, MapPin, Newspaper, Calculator, Triangle,
   TrendingUp, Route,
 } from 'lucide-react'
 
@@ -241,6 +241,7 @@ export const TEMPLATE_ICON: Record<string, React.ReactNode> = {
   photo_stack: <Images className="h-4 w-4" />,
   image_grid: <LayoutGrid className="h-4 w-4" />,
   custom_card: <Wand2 className="h-4 w-4" />,
+  cinematic_card: <Clapperboard className="h-4 w-4" />,
   map_card: <MapPin className="h-4 w-4" />,
   headline_ticker: <Newspaper className="h-4 w-4" />,
   math_steps: <Calculator className="h-4 w-4" />,
