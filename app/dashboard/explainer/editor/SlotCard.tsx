@@ -398,10 +398,12 @@ export function SlotCard({
         </div>
       )
     } else if (slot.content_type === 'cinematic') {
-      // The key explaining beat, staged in depth. The storyboard lists its
-      // parts in arrival order with the word that brings each one in; the
-      // camera moves only exist in motion, so the Play tab is where to see it.
+      // The key explaining beat as a flow diagram. Every part is DRAWN for
+      // this script and painted in the video's ink; the storyboard lists them
+      // in arrival order with the word that brings each one in, and the camera
+      // moves only exist in motion, so the Play tab is where to see it.
       const parts: Array<Record<string, any>> = Array.isArray(s.elements) ? s.elements : []
+      const drawnParts = parts.filter((p) => p.kind === 'visual' && p.image_path).length
       summary = (
         <div className="text-sm text-foreground">
           {parts.length === 0 ? (
@@ -412,15 +414,25 @@ export function SlotCard({
                 <li key={i} className="flex items-baseline gap-1.5">
                   <span className="text-[11px] text-ink3">{i + 1}.</span>
                   <span className="font-medium text-primary">
-                    {p.kind === 'formula' ? p.formula : p.kind === 'html' ? 'Drawn piece' : p.text}
+                    {p.kind === 'formula'
+                      ? p.formula
+                      : p.kind === 'visual'
+                        ? `${p.title || p.prompt || 'Drawing'}${p.status ? ` · ${p.status}` : ''}`
+                        : p.text}
                   </span>
+                  {Array.isArray(p.then) && p.then.length ? (
+                    <span className="text-[11px] text-ink3">→ {p.then.map((c: Record<string, any>) => c.status || 'changes').join(' → ')}</span>
+                  ) : null}
                   {p.word ? <span className="text-[11px] text-ink3">on “{p.word}”</span> : null}
                 </li>
               ))}
             </ol>
           )}
           <p className="mt-1.5 text-[11px] text-ink3">
-            Cinematic · {parts.length} part{parts.length === 1 ? '' : 's'} arriving in depth with camera moves — press Play to see it
+            Flow card · {parts.length} part{parts.length === 1 ? '' : 's'}
+            {drawnParts > 0 ? ` · ${drawnParts} drawn for this script` : ''}
+            {Array.isArray(s.links) && s.links.length ? ` · ${s.links.length} connection${s.links.length === 1 ? '' : 's'}` : ''} arriving in
+            depth with camera moves — press Play to see it
           </p>
         </div>
       )
