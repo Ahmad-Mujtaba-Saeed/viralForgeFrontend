@@ -31,6 +31,7 @@ export type SettingsHandlers = {
   onCompositionMode: (mode: string) => void
   onBoardStyle: (style: string) => void
   onMotionStyle: (style: string) => void
+  onMotionDepth: (depth: string) => void
   onRenderFps: (fps: number) => void
   onToggleMotionBlur: () => void
   onToggleBackdrop: () => void
@@ -428,6 +429,21 @@ export function SettingsSections({
                 hint: meta?.use_when,
               })),
             ]}
+          />
+        )}
+        {board.motion_depth_levels && (
+          <StyleSelect
+            group="motion-depth"
+            label="Depth"
+            value={board.motion_depth ?? 'subtle'}
+            pendingKey={pendingKeyIn('motion-depth')}
+            disabled={groupPending('motion-depth')}
+            onSelect={handlers.onMotionDepth}
+            options={Object.entries(board.motion_depth_levels).map(([key, hint]) => ({
+              key,
+              label: key === 'off' ? 'Flat' : key === 'subtle' ? 'Depth' : 'Cinematic',
+              hint,
+            }))}
           />
         )}
         {(board.render_fps_options?.length ?? 0) > 1 && (

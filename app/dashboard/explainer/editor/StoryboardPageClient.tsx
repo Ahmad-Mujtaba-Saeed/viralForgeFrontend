@@ -376,6 +376,10 @@ export function StoryboardPageClient() {
       },
       onMotionStyle: (style) =>
         void post(`motion-style:${style}`, 'motion-style', { style }, 'Failed to switch motion style'),
+      onMotionDepth: (depth) => {
+        if (depth === (board?.motion_depth ?? 'subtle')) return
+        void post(`motion-depth:${depth}`, 'motion-depth', { depth }, 'Failed to change the depth')
+      },
       onRenderFps: (fps) => {
         if (fps === (board?.render_fps ?? 30)) return
         void post(`render-fps:${fps}`, 'smooth-motion', { render_fps: fps }, 'Failed to change the frame rate')

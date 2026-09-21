@@ -139,6 +139,9 @@ export interface Storyboard {
   motion_style?: string
   motion_style_auto?: string | null
   motion_styles?: Record<string, { label: string; use_when: string }>
+  /** The depth rig's level for this video (motion/depthStage). */
+  motion_depth?: string | null
+  motion_depth_levels?: Record<string, string>
   skin?: string
   skin_auto?: string | null
   skin_resolved?: string
