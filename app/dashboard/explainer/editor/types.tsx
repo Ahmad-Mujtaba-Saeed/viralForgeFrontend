@@ -111,6 +111,8 @@ export interface Storyboard {
   transition_meanings?: Record<string, string>
   color_schemes?: Theme[]
   narration_enabled?: boolean
+  /** Narrator voice id (stock or `clone_<id>`); null = engine default. */
+  tts_voice?: string | null
   auto_visuals?: boolean
   auto_visuals_auto?: boolean
   music_enabled?: boolean
@@ -165,6 +167,7 @@ export interface Storyboard {
   accent_shift?: boolean
   aspect_variants?: boolean
   aspect_variants_multiplier?: number
+  billing?: ExplainerBillingInfo
   brand?: { logo_url?: string | null; color?: string | null; color_applied?: boolean }
   srt_url?: string | null
   youtube_kit_url?: string | null
@@ -172,6 +175,39 @@ export interface Storyboard {
   /** The designed thumbnail in each orientation the render produced. */
   thumbnails?: { orientation: 'landscape' | 'portrait'; url: string }[]
   output_videos?: { aspect: string; label: string; url: string | null }[]
+}
+
+/** What Render costs right now, itemised (backend ExplainerBilling::renderQuote). */
+export interface RenderQuote {
+  free_render: boolean
+  render: number
+  variants: number
+  images: number
+  image_cost: number
+  images_total: number
+  total: number
+}
+
+/** What switching AI visuals on would draw and cost. `paid` false = included. */
+export interface AiVisualsPreview {
+  paid: boolean
+  images: number
+  image_cost: number
+  total: number
+  max_images: number
+}
+
+export interface ExplainerBillingInfo {
+  render: RenderQuote
+  ai_visuals: AiVisualsPreview
+  pricing: {
+    tiers: Record<string, { label: string; max_seconds: number; cost: number }>
+    free_renders: number
+    rerender_cost: number
+    ai_image_cost: number
+    aspect_variants_multiplier: number
+  }
+  duration_tier: string
 }
 
 export interface MusicTrack {

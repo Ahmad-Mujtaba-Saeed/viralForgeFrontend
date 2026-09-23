@@ -17,13 +17,14 @@ import { SceneInspector } from './SceneInspector'
 import { SettingsSections, type SettingsHandlers } from './SettingsSections'
 import { RevisePanel } from './RevisePanel'
 import { AddSceneDialog } from './AddSceneDialog'
+import { CreditConfirmDialog, type CreditLine } from './CreditConfirmDialog'
 import { CustomSchemeDialog } from './CustomSchemeDialog'
 import { usePlayerPayload } from './usePlayerPayload'
 import { ElementPanel } from './editing/ElementPanel'
 import {
   parseEditId, useElementEdits, withLiveEdits, type Selection,
 } from './editing/elementEdits'
-import type { Storyboard } from './types'
+import type { RenderQuote, Storyboard } from './types'
 
 /**
  * The explainer storyboard editor.
@@ -108,12 +109,18 @@ export function StoryboardPageClient() {
     [pending]
   )
 
+  // The server's itemised quote: free first render, re-render price, the
+  // aspect-variant bundle and any AI pictures the user switched on. The old
+  // flat estimate is only a fallback for a board fetched before it existed.
+  const quote = board?.billing?.render
   const baseCost = costFor('ai_explainer_video')
-  // The §10.6 aspect-variant bundle multiplies the render charge.
-  const explainerCost = board?.aspect_variants
-    ? Math.ceil(baseCost * (board.aspect_variants_multiplier ?? 2.5))
-    : baseCost
+  const explainerCost =
+    quote?.total ??
+    (board?.aspect_variants ? Math.ceil(baseCost * (board.aspect_variants_multiplier ?? 2.5)) : baseCost)
   const canAffordRender = hasSubscription && credits >= explainerCost
+  const [renderConfirmOpen, setRenderConfirmOpen] = useState(false)
+  const [aiConfirmOpen, setAiConfirmOpen] = useState(false)
+  const [chargedCredits, setChargedCredits] = useState(0)
 
   useEffect(() => {
     fetchBilling().catch(() => {})
@@ -220,15 +227,23 @@ export function StoryboardPageClient() {
     )
   }, [board?.scenes])
 
-  const handleRender = async () => {
+  // Render asks first: the user sees what it costs (or that it is free)
+  // before anything is charged.
+  const handleRender = () => {
     // Credit gate (server enforces this too).
     if (!canAffordRender) {
       router.push('/dashboard/billing')
       return
     }
+    setRenderConfirmOpen(true)
+  }
+
+  const startRender = async () => {
+    setRenderConfirmOpen(false)
     setRendering(true)
     try {
       await api.post(`/api/explainer/projects/${id}/render`)
+      setChargedCredits(explainerCost)
       await fetchBoard()
       fetchBilling().catch(() => {})
       setShowProcessingModal(true)
@@ -399,8 +414,21 @@ export function StoryboardPageClient() {
           { enabled: !(board?.captions_enabled ?? board?.aspect_ratio === '9:16') },
           'Failed to toggle captions'
         ),
-      onToggleAutoVisuals: () =>
-        void post('auto-visuals', 'auto-visuals', { enabled: !board?.auto_visuals }, 'Failed to toggle AI visuals'),
+      onToggleAutoVisuals: () => {
+        const preview = board?.billing?.ai_visuals
+        // Turning it on is a purchase unless the pictures are already part
+        // of the storyboard: show the count and price, and only switch on
+        // after a yes.
+        if (!board?.auto_visuals && preview?.paid && preview.images > 0) {
+          setAiConfirmOpen(true)
+          return
+        }
+        void post('auto-visuals', 'auto-visuals', { enabled: !board?.auto_visuals }, 'Failed to toggle AI visuals')
+      },
+      onVoice: (voice: string) => {
+        if (voice === (board?.tts_voice ?? '')) return
+        void post(`voice:${voice}`, 'voice', { tts_voice: voice }, 'Failed to change the voice')
+      },
       onToggleChapterChip: () =>
         void post('chapter-chip', 'chapter-chip', { enabled: !(board?.chapter_chip ?? false) }, 'Failed to toggle chapter chip'),
       onToggleAccentShift: () =>
@@ -510,7 +538,7 @@ export function StoryboardPageClient() {
         </button>
       </div>
       <p className="text-[11px] text-muted-foreground">
-        This render costs {explainerCost} credit{explainerCost === 1 ? '' : 's'}.
+        {explainerCost === 0 ? 'This render is free.' : `This render costs ${explainerCost} credit${explainerCost === 1 ? '' : 's'}.`}
       </p>
     </div>
   )
@@ -724,7 +752,7 @@ export function StoryboardPageClient() {
                 ) : !canAffordRender ? (
                   <><Film className="h-4 w-4" /> {hasSubscription ? 'Get credits' : 'View plans'}</>
                 ) : (
-                  <><Film className="h-4 w-4" /> Approve &amp; render · {explainerCost} credits</>
+                  <><Film className="h-4 w-4" /> Approve &amp; render · {explainerCost === 0 ? 'Free' : `${explainerCost} credits`}</>
                 )}
               </button>
               <span className="text-center text-[11px] text-ink3">
@@ -794,8 +822,71 @@ export function StoryboardPageClient() {
         open={showProcessingModal}
         onOpenChange={setShowProcessingModal}
         templateName={board.title}
-        creditsCharged={explainerCost}
+        creditsCharged={chargedCredits}
+      />
+
+      <CreditConfirmDialog
+        open={renderConfirmOpen}
+        title="Render this video"
+        intro={
+          quote?.free_render
+            ? 'Your first render of this storyboard is free.'
+            : 'Re-rendering records the narration and draws every frame again.'
+        }
+        lines={renderLines(quote, explainerCost)}
+        balance={credits}
+        confirmLabel={explainerCost === 0 ? 'Render' : `Render · ${explainerCost} credits`}
+        busy={rendering}
+        onConfirm={() => (credits < explainerCost ? router.push('/dashboard/billing') : void startRender())}
+        onClose={() => setRenderConfirmOpen(false)}
+      />
+
+      <CreditConfirmDialog
+        open={aiConfirmOpen}
+        title="Turn on AI visuals"
+        intro={
+          <>
+            AI will draw a picture for each empty image slot when you render —{' '}
+            <strong className="text-foreground">
+              {board.billing?.ai_visuals.images ?? 0} picture{(board.billing?.ai_visuals.images ?? 0) === 1 ? '' : 's'}
+            </strong>{' '}
+            right now. You are charged when the render starts, only for slots still empty then; pictures that fail to
+            draw are refunded. Uploads and library picks are never replaced.
+          </>
+        }
+        lines={[
+          {
+            label: `${board.billing?.ai_visuals.images ?? 0} AI picture${(board.billing?.ai_visuals.images ?? 0) === 1 ? '' : 's'}`,
+            note: `${board.billing?.ai_visuals.image_cost ?? 25} credits each`,
+            amount: board.billing?.ai_visuals.total ?? 0,
+          },
+        ]}
+        balance={credits}
+        confirmLabel="Turn on"
+        busy={isPending('auto-visuals')}
+        onConfirm={() => {
+          setAiConfirmOpen(false)
+          void post('auto-visuals', 'auto-visuals', { enabled: true, accept_cost: true }, 'Failed to turn on AI visuals')
+        }}
+        onClose={() => setAiConfirmOpen(false)}
       />
     </div>
   )
+}
+
+/** The render quote as dialog lines; one "Render" line when the quote is missing. */
+function renderLines(quote: RenderQuote | undefined, fallbackTotal: number): CreditLine[] {
+  if (!quote) return [{ label: 'Render', amount: fallbackTotal }]
+  const lines: CreditLine[] = [
+    { label: quote.free_render ? 'First render' : 'Re-render', amount: quote.render },
+  ]
+  if (quote.variants > 0) lines.push({ label: 'Also 9:16 and 1:1', amount: quote.variants })
+  if (quote.images > 0) {
+    lines.push({
+      label: `${quote.images} AI picture${quote.images === 1 ? '' : 's'}`,
+      note: `${quote.image_cost} credits each · failed pictures are refunded`,
+      amount: quote.images_total,
+    })
+  }
+  return lines
 }

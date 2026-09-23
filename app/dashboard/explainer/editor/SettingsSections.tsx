@@ -9,6 +9,7 @@ import {
 import { BrandControls } from './BrandControls'
 import { LintReport } from './LintReport'
 import { MusicPanel } from './MusicPanel'
+import { VoicePicker } from './VoicePicker'
 import { StyleSelect, type SelectOption } from './StyleSelect'
 import { COMPOSITION_LABELS, type Storyboard } from './types'
 
@@ -39,6 +40,7 @@ export type SettingsHandlers = {
   onToggleMusic: () => void
   onToggleCaptions: () => void
   onToggleAutoVisuals: () => void
+  onVoice: (voice: string) => void
   onToggleChapterChip: () => void
   onToggleAccentShift: () => void
   onToggleAspectVariants: () => void
@@ -395,6 +397,18 @@ export function SettingsSections({
             title="Curated background music (by scene mood)"
           />
         </Row>
+        {narrationOn && (
+          <>
+            <Row label="Narrator" hint="Re-recorded in the new voice on the next render">
+              <VoicePicker
+                value={board.tts_voice}
+                busy={groupPending('voice')}
+                disabled={board.status === 'processing'}
+                onChange={handlers.onVoice}
+              />
+            </Row>
+          </>
+        )}
         {musicOn && <MusicPanel board={board} projectId={projectId} onChange={onChange} />}
       </Section>
 
@@ -551,7 +565,16 @@ export function SettingsSections({
             title="Karaoke word captions synced to the voiceover"
           />
         </Row>
-        <Row label="AI visuals">
+        <Row
+          label="AI visuals"
+          hint={
+            board.billing?.ai_visuals
+              ? board.billing.ai_visuals.paid
+                ? `${board.billing.ai_visuals.images} picture${board.billing.ai_visuals.images === 1 ? '' : 's'} · ${board.billing.ai_visuals.image_cost} credits each${autoVisualsOn ? ' · charged at render' : ''}`
+                : 'Included with this storyboard'
+              : undefined
+          }
+        >
           <Toggle
             on={autoVisualsOn}
             busy={isPending('auto-visuals')}
@@ -561,6 +584,15 @@ export function SettingsSections({
             title="Unfilled image slots are AI-illustrated at render — nothing to upload. Uploads still override."
           />
         </Row>
+        {board.billing?.ai_visuals && (
+          <p className="-mt-1 text-[11px] leading-snug text-muted-foreground">
+            {board.billing.ai_visuals.paid
+              ? board.billing.ai_visuals.images > 0
+                ? `${board.billing.ai_visuals.images} empty slot${board.billing.ai_visuals.images === 1 ? '' : 's'} · ${board.billing.ai_visuals.total} credits (${board.billing.ai_visuals.image_cost} each)${autoVisualsOn ? ', charged when you render' : ''}. Pictures that fail are refunded.`
+                : 'Every picture slot is filled — nothing to draw.'
+              : 'Included with this storyboard — no extra credits.'}
+          </p>
+        )}
         <Row label="Also render 9:16 & 1:1">
           <Toggle
             on={Boolean(board.aspect_variants)}

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { MusicPicker } from '@/components/create/music-picker'
 import { useBilling } from '@/hooks/useBilling'
+import type { ExplainerDurationTier } from '@/store/billingSlice'
 
 /**
  * The explainer brief — restyled to the editor's furniture.
@@ -92,9 +93,44 @@ const fieldCls =
 
 const sectionLabel = 'text-[11px] font-bold uppercase tracking-[0.07em] text-ink3'
 
+const DIRECTION_LINE =
+  /^\s*[[(]?\s*(on[\s-]?screen|visuals?|b[\s-]?roll|shot|cut to|graphics?|text on screen|lower third|title card|end screen|sfx|sound|music)\s*[:\-—–]/i
+const PAUSE_LINE = /^\s*[[(]\s*(beat|pause|silence|breath)\b[^\])]*[\])]\s*$/i
+const HEADING_LINE =
+  /^\s*(#{1,6}\s+|(chapter|part|section|act|segment)\s+[\dIVX]+\b|(cold open|intro|introduction|outro|conclusion|recap)\b)/i
+const TIMESTAMP_RANGE = /\d{1,2}:\d{2}\s*[–—-]\s*\d{1,2}:\d{2}/
+
+/** Words the narrator will actually say — the same lines the backend's ScriptBeats drops are not counted. */
+function spokenWordCount(script: string): number {
+  return script
+    .split(/\r?\n/)
+    .filter(
+      (line) =>
+        !DIRECTION_LINE.test(line) &&
+        !PAUSE_LINE.test(line) &&
+        !HEADING_LINE.test(line) &&
+        !(TIMESTAMP_RANGE.test(line) && line.trim().split(/\s+/).length <= 14)
+    )
+    .join(' ')
+    .replace(/\[[^\]]{0,80}\]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length
+}
+
+// Mirrors config/credits.php so the page works before /billing/me answers;
+// the server's list replaces it as soon as it arrives.
+const FALLBACK_TIERS: Record<string, ExplainerDurationTier> = {
+  short: { label: 'Up to 5 min', max_seconds: 300, cost: 100 },
+  medium: { label: 'Up to 10 min', max_seconds: 600, cost: 250 },
+  long: { label: 'Up to 15 min', max_seconds: 900, cost: 350 },
+}
+
 export default function ExplainerCreatePage() {
   const router = useRouter()
-  const { credits, hasSubscription, costFor, fetchBilling } = useBilling()
+  const { credits, hasSubscription, explainerPricing, fetchBilling } = useBilling()
+  const tiers = explainerPricing?.tiers ?? FALLBACK_TIERS
+  const [tier, setTier] = useState<string>('short')
   const [title, setTitle] = useState('')
   // The user's brief for the script writer — how this video should go, not
   // what it is about. Sent both to the generator and to the project, because
@@ -231,20 +267,29 @@ export default function ExplainerCreatePage() {
         ...(guide.trim() ? { guide: guide.trim() } : {}),
         aspect_ratio: aspectRatio,
         target_seconds: targetSeconds,
+        duration_tier: tier,
         ...(voice ? { tts_voice: voice } : {}),
         music_category: musicCategory,
         ...(musicTrackId ? { music_track_id: musicTrackId } : {}),
         music_volume: musicVolume,
       })
       const id = res.data?.data?.id
+      fetchBilling().catch(() => {})
       router.push(`/dashboard/explainer/editor?id=${id}`)
     } catch (err: any) {
+      if (err.response?.status === 402) {
+        router.push('/dashboard/billing')
+        return
+      }
       setError(err.response?.data?.message || 'Failed to create project')
       setSubmitting(false)
     }
   }
 
-  const words = useMemo(() => script.trim().split(/\s+/).filter(Boolean).length, [script])
+  // Only what the narrator will SAY: stage directions ("ON SCREEN: ..."),
+  // pause marks and chapter headings are never spoken (the backend's
+  // ScriptBeats strips the same lines), so they must not inflate the length.
+  const words = useMemo(() => spokenWordCount(script), [script])
   // ~2.5 words a second is the pace the storyboard's own duration estimate
   // uses, so the two agree about how long a script runs.
   const spoken = Math.round(words / 2.5)
@@ -252,8 +297,20 @@ export default function ExplainerCreatePage() {
   // slider now reaches six of them.
   const clock = (seconds: number) =>
     seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-  const cost = costFor('ai_explainer_video')
+  const activeTier = tiers[tier] ?? Object.values(tiers)[0]
+  const tierMax = activeTier?.max_seconds ?? 300
+  const cost = activeTier?.cost ?? 100
+  const canAfford = hasSubscription && credits >= cost
   const ready = title.trim().length >= 2 && script.trim().length >= 10
+  const chooseTier = (key: string) => {
+    setTier(key)
+    const max = tiers[key]?.max_seconds ?? 300
+    // A longer option starts the writer at a length that uses it; a shorter
+    // one pulls the target back inside its limit.
+    setTargetSeconds((current) => (current > max ? max : current))
+  }
+  // Past the tier's limit the script itself is too long for what was chosen.
+  const scriptTooLong = spoken > tierMax * 1.15
   const aspectLabel = ASPECT_RATIOS.find((r) => r.value === aspectRatio)?.label ?? aspectRatio
 
   return (
@@ -277,7 +334,7 @@ export default function ExplainerCreatePage() {
 
         <div className="flex flex-wrap items-center gap-2.5">
           <span
-            title={hasSubscription ? `${credits} credits · a render costs about ${cost}` : 'Subscribe to render'}
+            title={hasSubscription ? `${credits} credits · this storyboard costs ${cost}` : 'Subscribe to create videos'}
             className="inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[13px] font-semibold text-muted-foreground"
           >
             <Zap className="h-3.5 w-3.5 text-primary" />
@@ -285,12 +342,14 @@ export default function ExplainerCreatePage() {
           </span>
           <button
             type="submit"
-            disabled={submitting || !ready}
-            title={ready ? undefined : 'Add a title and a script first'}
+            disabled={submitting || !ready || !canAfford}
+            title={
+              !ready ? 'Add a title and a script first' : !canAfford ? `Needs ${cost} credits — you have ${credits}` : undefined
+            }
             className="inline-flex h-[34px] items-center gap-1.5 rounded-lg bg-foreground px-4 text-[13px] font-bold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Film className="h-3.5 w-3.5" />}
-            {submitting ? 'Analyzing…' : 'Generate storyboard'}
+            {submitting ? 'Analyzing…' : `Generate storyboard · ${cost}`}
           </button>
         </div>
       </header>
@@ -401,7 +460,7 @@ export default function ExplainerCreatePage() {
               id="format"
               icon={<Crop />}
               title="Format"
-              summary={`${aspectRatio} · ~${clock(targetSeconds)}`}
+              summary={`${aspectRatio} · ${activeTier?.label ?? ''} · ~${clock(targetSeconds)}`}
               open={Boolean(open.format)}
               onToggle={toggleSection}
             >
@@ -423,6 +482,36 @@ export default function ExplainerCreatePage() {
                 </select>
               </Row>
               <div>
+                <span className="mb-1.5 block text-[13px] text-muted-foreground">Video duration</span>
+                <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Video duration">
+                  {Object.entries(tiers).map(([key, t]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="radio"
+                      aria-checked={tier === key}
+                      onClick={() => chooseTier(key)}
+                      className={`flex flex-col items-center gap-0.5 rounded-xl border px-1.5 py-2 text-center transition-colors ${
+                        tier === key
+                          ? 'border-primary bg-accent-soft text-foreground'
+                          : 'border-border bg-card text-muted-foreground hover:bg-inset'
+                      }`}
+                    >
+                      <span className="text-[12px] font-semibold leading-tight">{t.label}</span>
+                      <span className="inline-flex items-center gap-0.5 font-mono text-[11px] text-primary">
+                        <Zap className="h-3 w-3" />
+                        {t.cost}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                  Credits are charged when the storyboard is generated. The first render is free; each re-render costs{' '}
+                  {explainerPricing?.rerender_cost ?? 100}. AI pictures you ask for cost {explainerPricing?.ai_image_cost ?? 25}{' '}
+                  each.
+                </p>
+              </div>
+              <div>
                 <div className="mb-1 flex items-center justify-between text-[13px]">
                   <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                     <Clock className="h-3 w-3" /> Target length
@@ -436,15 +525,22 @@ export default function ExplainerCreatePage() {
                   id="explainer-length"
                   type="range"
                   min={20}
-                  max={360}
+                  max={tierMax}
                   step={10}
                   value={targetSeconds}
                   onChange={(e) => setTargetSeconds(Number(e.target.value))}
                   className="w-full accent-primary"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  What the AI writer aims for. The real length comes from the narration once it is recorded.
+                  What the AI writer aims for, up to {clock(tierMax)}. The real length comes from the narration once it is
+                  recorded.
                 </p>
+                {scriptTooLong && (
+                  <p className="mt-1 text-[11px] font-semibold text-primary">
+                    This script runs about {clock(spoken)} — longer than {activeTier?.label.toLowerCase()}. Pick a longer
+                    duration or trim it.
+                  </p>
+                )}
               </div>
               <p className="text-[11px] text-muted-foreground">{aspectLabel}</p>
             </Section>
@@ -531,16 +627,26 @@ export default function ExplainerCreatePage() {
                 Add a title and a script of at least a few sentences.
               </p>
             )}
+            {ready && !canAfford && (
+              <p className="text-[12px] leading-snug text-muted-foreground">
+                {hasSubscription
+                  ? `This storyboard needs ${cost} credits — you have ${credits}.`
+                  : 'Subscribe to generate explainer videos.'}{' '}
+                <a href="/dashboard/billing" className="font-semibold text-primary underline">
+                  {hasSubscription ? 'Get credits' : 'View plans'}
+                </a>
+              </p>
+            )}
             <button
               type="submit"
-              disabled={submitting || !ready}
+              disabled={submitting || !ready || !canAfford}
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-soft transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {submitting ? 'Analyzing…' : 'Generate storyboard'}
+              {submitting ? 'Analyzing…' : `Generate storyboard · ${cost} credits`}
             </button>
             <span className="text-center text-[11px] text-ink3">
-              Free to plan — credits are only spent when you render.
+              {activeTier?.label} · {cost} credits now · first render free
             </span>
           </div>
         </aside>

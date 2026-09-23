@@ -29,6 +29,22 @@ export interface BillingSubscription {
   plan?: Plan | null
 }
 
+/** The explainer is billed per step — see config/credits.php `explainer`. */
+export interface ExplainerDurationTier {
+  label: string
+  max_seconds: number
+  cost: number
+}
+
+export interface ExplainerPricing {
+  tiers: Record<string, ExplainerDurationTier>
+  default_tier: string
+  free_renders: number
+  rerender_cost: number
+  ai_image_cost: number
+  aspect_variants_multiplier: number
+}
+
 interface BillingState {
   hasSubscription: boolean
   credits: number
@@ -38,6 +54,7 @@ interface BillingState {
   plan: Plan | null
   templateCosts: Record<string, number>
   defaultCost: number
+  explainerPricing: ExplainerPricing | null
   plans: Plan[]
   isLoading: boolean
   isLoadingPlans: boolean
@@ -54,6 +71,7 @@ const initialState: BillingState = {
   plan: null,
   templateCosts: {},
   defaultCost: 3,
+  explainerPricing: null,
   plans: [],
   isLoading: false,
   isLoadingPlans: false,
@@ -166,6 +184,7 @@ const billingSlice = createSlice({
         state.plan = action.payload.plan ?? null
         state.templateCosts = action.payload.template_costs ?? {}
         state.defaultCost = action.payload.default_cost ?? 3
+        state.explainerPricing = action.payload.explainer_pricing ?? null
       })
       .addCase(fetchBilling.rejected, (state, action) => {
         state.isLoading = false

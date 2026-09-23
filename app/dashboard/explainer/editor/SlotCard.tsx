@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import api from '@/lib/axios'
+import { useBilling } from '@/hooks/useBilling'
 import {
   Loader2, Upload, X, Film, MessageSquare, Move, MapPin, Sparkles, Eye,
   Pencil, Check, Wand2, Plus, Search, Library,
@@ -241,6 +242,9 @@ export function SlotCard({
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [generating, setGenerating] = useState(false)
+  // Every picture drawn on request is billed (refunded if none comes back).
+  const { explainerPricing, fetchBilling } = useBilling()
+  const imageCost = explainerPricing?.ai_image_cost ?? 25
   const [genError, setGenError] = useState<string | null>(null)
   const [subject, setSubject] = useState(slot.asset_request?.description ?? '')
   const [instruction, setInstruction] = useState(slot.asset_request?.instruction ?? '')
@@ -270,6 +274,7 @@ export function SlotCard({
       setGenError(err?.response?.data?.message || 'The image could not be generated.')
     } finally {
       setGenerating(false)
+      fetchBilling().catch(() => {})
     }
   }
 
@@ -980,7 +985,7 @@ export function SlotCard({
                 className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
               >
                 {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                {slot.asset?.url ? 'Draw again' : 'Draw it'}
+                {slot.asset?.url ? 'Draw again' : 'Draw it'} · {imageCost} credits
               </button>
             </div>
           </div>
