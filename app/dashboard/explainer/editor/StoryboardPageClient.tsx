@@ -75,7 +75,12 @@ export function StoryboardPageClient() {
         .join('|'),
     [board]
   )
-  const player = usePlayerPayload(id ?? '', `${board?.current_look ?? ''}#${boardStamp}`)
+  // Sound effects are not part of the look hash (they draw nothing), but the
+  // preview plays them, so switching them must refresh the payload too.
+  const player = usePlayerPayload(
+    id ?? '',
+    `${board?.current_look ?? ''}#${boardStamp}#sfx:${board?.sfx_enabled ?? true}:${board?.sfx_volume ?? 1}`
+  )
 
   // Generic in-flight tracker so every settings button gets the same
   // "yes, your click registered" feedback (spinner + disabled) without a
@@ -405,6 +410,10 @@ export function StoryboardPageClient() {
         void post('backdrop', 'backdrop', { enabled: !(board?.backdrop_enabled ?? true) }, 'Failed to toggle the backdrop field'),
       onToggleNarration: () =>
         void post('narration', 'narration', { enabled: !(board?.narration_enabled ?? true) }, 'Failed to toggle voiceover'),
+      onToggleSfx: () =>
+        void post('sfx', 'sfx', { enabled: !(board?.sfx_enabled ?? true) }, 'Failed to toggle sound effects'),
+      onSfxVolume: (volume: number) =>
+        void post('sfx-volume', 'sfx', { volume }, 'Failed to change the sound-effects volume'),
       onToggleMusic: () =>
         void post('music', 'music', { enabled: !(board?.music_enabled ?? true) }, 'Failed to toggle background music'),
       onToggleCaptions: () =>

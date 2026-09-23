@@ -38,6 +38,8 @@ export type SettingsHandlers = {
   onToggleBackdrop: () => void
   onToggleNarration: () => void
   onToggleMusic: () => void
+  onToggleSfx: () => void
+  onSfxVolume: (volume: number) => void
   onToggleCaptions: () => void
   onToggleAutoVisuals: () => void
   onVoice: (voice: string) => void
@@ -93,6 +95,39 @@ function Section({
 }
 
 /** label — control, the shape every settings row in the design takes. */
+/** Sound-effects level: saved on release, not on every step of the drag. */
+function SfxVolume({ value, busy, onCommit }: { value: number; busy: boolean; onCommit: (v: number) => void }) {
+  const [local, setLocal] = React.useState(value)
+  React.useEffect(() => setLocal(value), [value])
+  const commit = () => {
+    if (Math.abs(local - value) > 0.001) onCommit(local)
+  }
+  return (
+    <div className="flex items-center justify-between gap-2 text-[13px]">
+      <label htmlFor="sfx-volume" className="text-muted-foreground">
+        Effects volume
+      </label>
+      <span className="inline-flex items-center gap-2">
+        <input
+          id="sfx-volume"
+          type="range"
+          min={0.2}
+          max={1.5}
+          step={0.1}
+          value={local}
+          disabled={busy}
+          onChange={(e) => setLocal(Number(e.target.value))}
+          onMouseUp={commit}
+          onTouchEnd={commit}
+          onKeyUp={commit}
+          className="w-28 accent-primary disabled:opacity-60"
+        />
+        <span className="w-9 text-right font-mono text-xs text-foreground">{Math.round(local * 100)}%</span>
+      </span>
+    </div>
+  )
+}
+
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
@@ -178,6 +213,7 @@ export function SettingsSections({
   const backdropOn = board.backdrop_enabled ?? true
   const motionBlurOn = board.motion_blur ?? true
   const autoVisualsOn = Boolean(board.auto_visuals)
+  const sfxOn = board.sfx_enabled ?? true
   const smoothFps = board.render_fps ?? 30
 
   // The palette list the picker shows. Built-ins have a recorded loop keyed by
@@ -371,7 +407,9 @@ export function SettingsSections({
         id="sound"
         icon={<Volume2 />}
         title="Sound"
-        summary={narrationOn ? (musicOn ? 'Voice + music' : 'Voice only') : musicOn ? 'Music only' : 'Silent'}
+        summary={
+          [narrationOn && 'Voice', musicOn && 'music', sfxOn && 'effects'].filter(Boolean).join(' + ') || 'Silent'
+        }
         open={Boolean(open.sound)}
         onToggle={toggleSection}
       >
@@ -408,6 +446,24 @@ export function SettingsSections({
               />
             </Row>
           </>
+        )}
+        <Row label="Sound effects" hint="Whooshes on camera moves, pops as points land, hits under punchlines">
+          <Toggle
+            on={sfxOn}
+            busy={isPending('sfx')}
+            onClick={handlers.onToggleSfx}
+            onIcon={<Volume2 />}
+            offIcon={<VolumeX />}
+            label="SFX"
+            title="Whooshes on camera moves, pops as points land, hits under punchlines"
+          />
+        </Row>
+        {sfxOn && (
+          <SfxVolume
+            value={board.sfx_volume ?? 1}
+            busy={isPending('sfx-volume')}
+            onCommit={handlers.onSfxVolume}
+          />
         )}
         {musicOn && <MusicPanel board={board} projectId={projectId} onChange={onChange} />}
       </Section>

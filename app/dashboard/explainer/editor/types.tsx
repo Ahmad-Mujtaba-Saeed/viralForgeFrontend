@@ -111,6 +111,10 @@ export interface Storyboard {
   transition_meanings?: Record<string, string>
   color_schemes?: Theme[]
   narration_enabled?: boolean
+  /** Sound effects: flight whooshes, bullet pops, punchline hits. */
+  sfx_enabled?: boolean
+  /** 0-2, 1 = as designed. */
+  sfx_volume?: number
   /** Narrator voice id (stock or `clone_<id>`); null = engine default. */
   tts_voice?: string | null
   auto_visuals?: boolean
